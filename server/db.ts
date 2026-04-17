@@ -108,7 +108,7 @@ export async function getTeamBingoState(teamNumber: number): Promise<TeamBingoSt
   return result.length > 0 ? result[0] : undefined;
 }
 
-// チームビンゴ状態の作成または更新
+// チームビンゴ状態の作成または更新（原子的操作）
 export async function upsertTeamBingoState(teamNumber: number, state: Omit<InsertTeamBingoState, 'teamNumber'>): Promise<void> {
   const db = await getDb();
   if (!db) {
@@ -117,27 +117,19 @@ export async function upsertTeamBingoState(teamNumber: number, state: Omit<Inser
   }
 
   try {
-    const existing = await getTeamBingoState(teamNumber);
-    
-    if (existing) {
-      // 更新
-      await db
-        .update(teamBingoStates)
-        .set({
-          gridData: state.gridData,
-          markedCells: state.markedCells,
-          completedLines: state.completedLines,
-          totalScore: state.totalScore,
-          updatedAt: new Date(),
-        })
-        .where(eq(teamBingoStates.teamNumber, teamNumber));
-    } else {
-      // 作成
-      await db.insert(teamBingoStates).values({
-        teamNumber,
-        ...state,
-      });
-    }
+    // onDuplicateKeyUpdateで原子的に作成または更新
+    await db.insert(teamBingoStates).values({
+      teamNumber,
+      ...state,
+    }).onDuplicateKeyUpdate({
+      set: {
+        gridData: state.gridData,
+        markedCells: state.markedCells,
+        completedLines: state.completedLines,
+        totalScore: state.totalScore,
+        updatedAt: new Date(),
+      },
+    });
   } catch (error) {
     console.error("[Database] Failed to upsert team bingo state:", error);
     throw error;

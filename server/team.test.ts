@@ -22,8 +22,8 @@ describe("team.getBingoState", () => {
     const ctx = createPublicContext();
     const caller = appRouter.createCaller(ctx);
 
-    // 新しいチーム（5）のデータを取得
-    const result = await caller.team.getBingoState({ teamNumber: 5 });
+    // 新しいチーム（10）のデータを取得（存在しないチーム番号）
+    const result = await caller.team.getBingoState({ teamNumber: 10 });
 
     // 最初はnullが返される（またはデータベースに存在しない）
     expect(result).toBeNull();

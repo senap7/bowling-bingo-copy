@@ -1,0 +1,1 @@
+ALTER TABLE `teamBingoStates` ADD CONSTRAINT `teamBingoStates_teamNumber_unique` UNIQUE(`teamNumber`);

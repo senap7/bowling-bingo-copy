@@ -15,6 +15,13 @@
       "when": 1776420556708,
       "tag": "0001_minor_starjammers",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1776422684995,
+      "tag": "0002_dry_edwin_jarvis",
+      "breakpoints": true
     }
   ]
 }

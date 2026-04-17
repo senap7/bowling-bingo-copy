@@ -28,7 +28,7 @@ export type InsertUser = typeof users.$inferInsert;
 // チーム別ビンゴゲーム状態テーブル
 export const teamBingoStates = mysqlTable("teamBingoStates", {
   id: int("id").autoincrement().primaryKey(),
-  teamNumber: int("teamNumber").notNull(), // 1-10
+  teamNumber: int("teamNumber").notNull().unique(), // 1-10 (ユニーク制約)
   gridData: text("gridData").notNull(), // JSON形式のビンゴグリッド
   markedCells: text("markedCells").notNull(), // JSON形式のマーク状態
   completedLines: text("completedLines").notNull(), // JSON形式の完成ラインリスト
