@@ -135,7 +135,7 @@ describe("team.updateBingoState", () => {
     expect(getResult).not.toBeNull();
     expect(getResult?.teamNumber).toBe(teamNumber);
     expect(getResult?.totalScore).toBe(0);
-    expect(getResult?.completedLines).toEqual([]);
+    expect(getResult?.completedLines).toEqual('[]');
   });
 
   it("updates existing team state", async () => {
@@ -171,7 +171,7 @@ describe("team.updateBingoState", () => {
     const getResult = await caller.team.getBingoState({ teamNumber });
 
     expect(getResult?.totalScore).toBe(6);
-    expect(getResult?.completedLines).toEqual(["row-0"]);
+    expect(getResult?.completedLines).toEqual('["row-0"]');
   });
 
   it("validates team number range on update", async () => {

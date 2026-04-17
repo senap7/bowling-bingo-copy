@@ -29,12 +29,8 @@ export const appRouter = router({
         if (!state) {
           return null;
         }
-        return {
-          ...state,
-          gridData: JSON.parse(state.gridData),
-          markedCells: JSON.parse(state.markedCells),
-          completedLines: JSON.parse(state.completedLines),
-        };
+        // JSON文字列のまま返す（フロントエンドでパースする）
+        return state;
       }),
     
     // チームビンゴ状態を更新
