@@ -133,12 +133,19 @@ const calculateScore = (grid: BingoCell[][], completedLines: string[]): number =
 
 // グリッドをJSON文字列に変換
 const gridToString = (grid: BingoCell[][]): string => {
-  return JSON.stringify(grid);
+  // スコア情報のみを保存（markedはmarkedCellsToStringで別途保存）
+  const scoreGrid = grid.map(row => row.map(cell => ({ id: cell.id, score: cell.score })));
+  return JSON.stringify(scoreGrid);
 };
 
 // JSON文字列をグリッドに変換
 const stringToGrid = (str: string): BingoCell[][] => {
-  return JSON.parse(str);
+  const scoreGrid = JSON.parse(str);
+  return scoreGrid.map((row: any[]) => row.map((cell: any) => ({
+    id: cell.id,
+    score: cell.score,
+    marked: false,
+  })));
 };
 
 // マーク状態をJSON文字列に変換
@@ -154,14 +161,19 @@ const markedCellsToString = (grid: BingoCell[][]): string => {
 
 // JSON文字列をマーク状態に変換してグリッドに適用
 const applyMarkedCells = (grid: BingoCell[][], markedStr: string): BingoCell[][] => {
-  const marked: Record<string, boolean> = JSON.parse(markedStr);
-  const newGrid = grid.map(row => [...row]);
-  for (let row = 0; row < 5; row++) {
-    for (let col = 0; col < 5; col++) {
-      newGrid[row][col].marked = marked[`${row}-${col}`] || false;
+  try {
+    const marked: Record<string, boolean> = JSON.parse(markedStr);
+    const newGrid = grid.map(row => [...row]);
+    for (let row = 0; row < 5; row++) {
+      for (let col = 0; col < 5; col++) {
+        newGrid[row][col].marked = marked[`${row}-${col}`] || false;
+      }
     }
+    return newGrid;
+  } catch (e) {
+    console.error('Error parsing markedCells:', e);
+    return grid;
   }
-  return newGrid;
 };
 
 export const useTeamBingoBowling = (teamNumber: number) => {
@@ -181,13 +193,22 @@ export const useTeamBingoBowling = (teamNumber: number) => {
   // 初期化: サーバーから状態を取得
   useEffect(() => {
     if (teamState && !isInitialized) {
-      const newGrid = stringToGrid(teamState.gridData);
-      const newGridWithMarked = applyMarkedCells(newGrid, teamState.markedCells);
-      const newCompletedLines = JSON.parse(teamState.completedLines);
-      
-      setGrid(newGridWithMarked);
-      setCompletedLines(newCompletedLines);
-      setIsInitialized(true);
+      try {
+        const newGrid = stringToGrid(teamState.gridData);
+        const newGridWithMarked = applyMarkedCells(newGrid, teamState.markedCells);
+        const newCompletedLines = JSON.parse(teamState.completedLines);
+        
+        setGrid(newGridWithMarked);
+        setCompletedLines(newCompletedLines);
+        setIsInitialized(true);
+      } catch (e) {
+        console.error('Error initializing team state:', e);
+        // エラーの場合は新しいグリッドを生成
+        const newGrid = generateBingoGrid();
+        setGrid(newGrid);
+        setCompletedLines([]);
+        setIsInitialized(true);
+      }
     } else if (!teamState && !isInitialized && !isLoading) {
       // 新しいチームの場合は初期グリッドを作成
       const newGrid = generateBingoGrid();
