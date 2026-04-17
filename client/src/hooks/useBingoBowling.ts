@@ -13,48 +13,72 @@ export interface BingoState {
 }
 
 // ボウリングスコアのパターン（正式な表記法）
+// 1つ目の数字が0のものは除外、重複なし
 const BOWLING_SCORES = [
-  '0|0', '1|0', '1|1', '1|2', '1|3', '1|4', '1|5', '1|6', '1|7', '1|8', '1|9',
-  '2|0', '2|1', '2|2', '2|3', '2|4', '2|5', '2|6', '2|7', '2|8',
-  '3|0', '3|1', '3|2', '3|3', '3|4', '3|5', '3|6', '3|7',
-  '4|0', '4|1', '4|2', '4|3', '4|4', '4|5', '4|6',
-  '5|0', '5|1', '5|2', '5|3', '5|4', '5|5',
-  '6|0', '6|1', '6|2', '6|3', '6|4',
-  '7|0', '7|1', '7|2', '7|3',
-  '8|0', '8|1', '8|2',
-  '9|0', '9|1',
-  '1/', '2/', '3/', '4/', '5/', '6/', '7/', '8/', '9/', // スペア表記
-  'X', // ストライク
+  '1|1', '1|2', '1|3', '1|4', '1|5', '1|6', '1|7', '1|8', '1|9',
+  '2|1', '2|2', '2|3', '2|4', '2|5', '2|6', '2|7', '2|8',
+  '3|1', '3|2', '3|3', '3|4', '3|5', '3|6', '3|7',
+  '4|1', '4|2', '4|3', '4|4', '4|5', '4|6',
+  '5|1', '5|2', '5|3', '5|4', '5|5',
+  '6|1', '6|2', '6|3', '6|4',
+  '7|1', '7|2', '7|3',
+  '8|1', '8|2',
+  '9|1',
+  '1◢', '2◢', '3◢', '4◢', '5◢', '6◢', '7◢', '8◢', '9◢', // スペア表記（◢で2つ目を表記）
 ];
 
-// ボウリングスコアをシャッフルして5x5グリッドを生成（真ん中はストライク固定）
-const generateBingoGrid = (): BingoCell[][] => {
-  const shuffled = [...BOWLING_SCORES].sort(() => Math.random() - 0.5);
-  const grid: BingoCell[][] = [];
-  
+// 重複チェック関数
+const hasDuplicate = (grid: BingoCell[][]): boolean => {
+  const scores = new Set<string>();
   for (let row = 0; row < 5; row++) {
-    grid[row] = [];
     for (let col = 0; col < 5; col++) {
-      // 真ん中のマス（3行目3列目）はストライク固定
-      if (row === 2 && col === 2) {
-        grid[row][col] = {
-          id: `${row}-${col}`,
-          score: 'X',
-          marked: false,
-        };
-      } else {
-        const index = row * 5 + col;
-        grid[row][col] = {
-          id: `${row}-${col}`,
-          score: shuffled[index % shuffled.length],
-          marked: false,
-        };
+      const score = grid[row][col].score;
+      if (scores.has(score)) {
+        return true;
       }
+      scores.add(score);
     }
   }
+  return false;
+};
+
+// ボウリングスコアをシャッフルして5x5グリッドを生成（真ん中はストライク固定、重複なし）
+const generateBingoGrid = (): BingoCell[][] => {
+  let grid: BingoCell[][] = [];
+  let attempts = 0;
+  const maxAttempts = 100;
+  
+  // 重複がないグリッドが生成されるまでリトライ
+  do {
+    const shuffled = [...BOWLING_SCORES].sort(() => Math.random() - 0.5);
+    grid = [];
+    
+    for (let row = 0; row < 5; row++) {
+      grid[row] = [];
+      for (let col = 0; col < 5; col++) {
+        // 真ん中のマス（3行目3列目）はストライク固定
+        if (row === 2 && col === 2) {
+          grid[row][col] = {
+            id: `${row}-${col}`,
+            score: '▶︎◀︎',
+            marked: false,
+          };
+        } else {
+          const index = row * 5 + col;
+          grid[row][col] = {
+            id: `${row}-${col}`,
+            score: shuffled[index % shuffled.length],
+            marked: false,
+          };
+        }
+      }
+    }
+    
+    attempts++;
+  } while (hasDuplicate(grid) && attempts < maxAttempts);
   
   return grid;
-}
+};
 
 // 1列揃っているかチェック（縦・横・斜め）
 const checkLines = (grid: BingoCell[][]): string[] => {
