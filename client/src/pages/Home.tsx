@@ -1,18 +1,24 @@
-import { useBingoBowling } from '@/hooks/useBingoBowling';
+import { useTeamBingoBowling } from '@/hooks/useTeamBingoBowling';
 import { Button } from '@/components/ui/button';
 import { RotateCcw, Zap } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import { useAuth } from '@/_core/hooks/useAuth';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 /**
  * ボウリングビンゴ - メインゲームページ
  * ネオンレトロスタイル: 深い紺色背景、ネオンピンク/シアン/イエローのアクセント
  * スマホ最適化: タップしやすい大きなマス、レスポンシブレイアウト
+ * チーム機能: 複数チーム対応、リアルタイム同期
  */
 export default function Home() {
-  const { grid, totalScore, completedLines, toggleCell, resetGame, isLineCompleted } = useBingoBowling();
+  const { user, loading, error, isAuthenticated, logout } = useAuth();
+  const [selectedTeam, setSelectedTeam] = useState<number>(1);
   const [animatingCells, setAnimatingCells] = useState<Set<string>>(new Set());
   const [showBingoEffect, setShowBingoEffect] = useState(false);
   const [particles, setParticles] = useState<Array<{ id: string; x: number; y: number }>>([]);
+
+  const { grid, totalScore, completedLines, toggleCell, resetGame, isLineCompleted, isLoading } = useTeamBingoBowling(selectedTeam);
 
   // ビンゴ達成時のエフェクト
   useEffect(() => {
@@ -73,7 +79,7 @@ export default function Home() {
       )}
 
       {/* ヘッダー */}
-      <div className="text-center mb-8 z-10">
+      <div className="text-center mb-6 z-10">
         <h1 className="text-4xl md:text-5xl font-bold mb-2 text-neon-pink drop-shadow-lg" style={{
           textShadow: '0 0 20px rgba(255, 0, 110, 0.8), 0 0 40px rgba(0, 245, 255, 0.4)'
         }}>
@@ -84,6 +90,27 @@ export default function Home() {
         }}>
           ボウリングスコアでビンゴを完成させよう！
         </p>
+      </div>
+
+      {/* チーム選択 */}
+      <div className="mb-6 z-10">
+        <div className="flex items-center gap-3 bg-card border-2 border-neon-cyan rounded-lg p-3 md:p-4 backdrop-blur-sm" style={{
+          boxShadow: '0 0 15px rgba(0, 245, 255, 0.3)'
+        }}>
+          <label className="text-neon-cyan text-sm md:text-base font-bold">チーム:</label>
+          <Select value={selectedTeam.toString()} onValueChange={(value) => setSelectedTeam(parseInt(value))}>
+            <SelectTrigger className="w-20 md:w-24 bg-dark-card border-neon-cyan text-neon-cyan">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="bg-dark-card border-neon-cyan">
+              {Array.from({ length: 10 }, (_, i) => i + 1).map(team => (
+                <SelectItem key={team} value={team.toString()} className="text-neon-cyan hover:bg-neon-pink hover:text-background">
+                  {team}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {/* スコア表示 */}
@@ -110,45 +137,51 @@ export default function Home() {
       </div>
 
       {/* ビンゴグリッド */}
-      <div className="mb-8 z-10">
-        <div className="grid grid-cols-5 gap-2 md:gap-3 p-4 md:p-6 bg-card border-2 border-neon-pink rounded-lg backdrop-blur-sm" style={{
-          boxShadow: '0 0 30px rgba(255, 0, 110, 0.4), inset 0 0 30px rgba(255, 0, 110, 0.05)'
-        }}>
-          {grid.map((row, rowIndex) =>
-            row.map((cell, colIndex) => {
-              const isCompleted = isLineCompleted(rowIndex, colIndex);
-              const isAnimating = animatingCells.has(cell.id);
-
-              return (
-                <button
-                  key={cell.id}
-                  onClick={() => handleCellClick(rowIndex, colIndex)}
-                  className={`
-                    w-14 h-14 md:w-16 md:h-16 lg:w-20 lg:h-20
-                    rounded-lg font-mono font-bold text-xs md:text-sm
-                    transition-all duration-300
-                    flex items-center justify-center
-                    border-2
-                    ${cell.marked
-                      ? 'bg-neon-pink text-background border-neon-pink'
-                      : 'bg-dark-card text-neon-cyan border-neon-cyan hover:border-neon-yellow'
-                    }
-                    ${isCompleted && cell.marked ? 'ring-2 ring-neon-yellow animate-neon-pulse' : ''}
-                    ${isAnimating ? 'scale-110' : 'scale-100'}
-                  `}
-                  style={{
-                    boxShadow: cell.marked
-                      ? `0 0 15px rgba(255, 0, 110, 0.8), inset 0 0 10px rgba(255, 0, 110, 0.3)`
-                      : `0 0 10px rgba(0, 245, 255, 0.3)`,
-                  }}
-                >
-                  <span>{cell.score}</span>
-                </button>
-              );
-            })
-          )}
+      {isLoading ? (
+        <div className="mb-8 z-10 text-neon-cyan text-center">
+          <p>読み込み中...</p>
         </div>
-      </div>
+      ) : (
+        <div className="mb-8 z-10">
+          <div className="grid grid-cols-5 gap-2 md:gap-3 p-4 md:p-6 bg-card border-2 border-neon-pink rounded-lg backdrop-blur-sm" style={{
+            boxShadow: '0 0 30px rgba(255, 0, 110, 0.4), inset 0 0 30px rgba(255, 0, 110, 0.05)'
+          }}>
+            {grid.map((row, rowIndex) =>
+              row.map((cell, colIndex) => {
+                const isCompleted = isLineCompleted(rowIndex, colIndex);
+                const isAnimating = animatingCells.has(cell.id);
+
+                return (
+                  <button
+                    key={cell.id}
+                    onClick={() => handleCellClick(rowIndex, colIndex)}
+                    className={`
+                      w-14 h-14 md:w-16 md:h-16 lg:w-20 lg:h-20
+                      rounded-lg font-mono font-bold text-xs md:text-sm
+                      transition-all duration-300
+                      flex items-center justify-center
+                      border-2
+                      ${cell.marked
+                        ? 'bg-neon-pink text-background border-neon-pink'
+                        : 'bg-dark-card text-neon-cyan border-neon-cyan hover:border-neon-yellow'
+                      }
+                      ${isCompleted && cell.marked ? 'ring-2 ring-neon-yellow animate-neon-pulse' : ''}
+                      ${isAnimating ? 'scale-110' : 'scale-100'}
+                    `}
+                    style={{
+                      boxShadow: cell.marked
+                        ? `0 0 15px rgba(255, 0, 110, 0.8), inset 0 0 10px rgba(255, 0, 110, 0.3)`
+                        : `0 0 10px rgba(0, 245, 255, 0.3)`,
+                    }}
+                  >
+                    <span>{cell.score}</span>
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
 
       {/* リセットボタン */}
       <div className="z-10">
