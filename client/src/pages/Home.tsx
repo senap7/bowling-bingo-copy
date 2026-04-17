@@ -4,6 +4,7 @@ import { RotateCcw, Zap } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/_core/hooks/useAuth';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { trpc } from '@/lib/trpc';
 
 /**
  * ボウリングビンゴ - メインゲームページ
@@ -17,8 +18,15 @@ export default function Home() {
   const [animatingCells, setAnimatingCells] = useState<Set<string>>(new Set());
   const [showBingoEffect, setShowBingoEffect] = useState(false);
   const [particles, setParticles] = useState<Array<{ id: string; x: number; y: number }>>([]);
+  const utils = trpc.useUtils();
 
   const { grid, totalScore, completedLines, toggleCell, resetGame, isLineCompleted, isLoading } = useTeamBingoBowling(selectedTeam);
+
+  // チーム変更時にキャッシュを無効化
+  const handleTeamChange = (value: string) => {
+    utils.team.getBingoState.invalidate();
+    setSelectedTeam(parseInt(value));
+  };
 
   // ビンゴ達成時のエフェクト
   useEffect(() => {
@@ -98,7 +106,7 @@ export default function Home() {
           boxShadow: '0 0 15px rgba(0, 245, 255, 0.3)'
         }}>
           <label className="text-neon-cyan text-sm md:text-base font-bold">チーム:</label>
-          <Select value={selectedTeam.toString()} onValueChange={(value) => setSelectedTeam(parseInt(value))}>
+          <Select value={selectedTeam.toString()} onValueChange={handleTeamChange}>
             <SelectTrigger className="w-20 md:w-24 bg-dark-card border-neon-cyan text-neon-cyan">
               <SelectValue />
             </SelectTrigger>

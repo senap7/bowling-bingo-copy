@@ -192,6 +192,11 @@ export const useTeamBingoBowling = (teamNumber: number) => {
 
   // 初期化: サーバーから状態を取得
   useEffect(() => {
+    // チーム番号が変更されたときはリセット
+    setIsInitialized(false);
+  }, [teamNumber]);
+
+  useEffect(() => {
     if (teamState && !isInitialized) {
       try {
         const newGrid = stringToGrid(teamState.gridData);
