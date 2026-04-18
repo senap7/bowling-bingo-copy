@@ -103,7 +103,8 @@ export default function Admin() {
             <Button
               onClick={() => verifyMutation.mutate({ password })}
               disabled={verifyMutation.isPending || !password}
-              className="w-full bg-neon-cyan text-background font-bold hover:bg-neon-yellow transition-colors"
+              className="w-full text-background font-bold hover:opacity-90 transition-colors"
+              style={{ backgroundColor: '#7680c6' }}
             >
               {verifyMutation.isPending ? '確認中...' : '入室する'}
             </Button>
