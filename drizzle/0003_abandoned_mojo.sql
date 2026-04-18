@@ -1,0 +1,7 @@
+CREATE TABLE `sharedBingoLayout` (
+	`id` int AUTO_INCREMENT NOT NULL,
+	`gridData` text NOT NULL,
+	`createdAt` timestamp NOT NULL DEFAULT (now()),
+	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+	CONSTRAINT `sharedBingoLayout_id` PRIMARY KEY(`id`)
+);

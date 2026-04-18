@@ -184,3 +184,61 @@ export async function resetTeam(teamNumber: number): Promise<void> {
     throw error;
   }
 }
+
+// ============================================================
+// 共通ビンゴカード配置（全チーム共有）
+// ============================================================
+
+import { sharedBingoLayout, SharedBingoLayout } from "../drizzle/schema";
+
+// 共通カード配置を取得（存在しない場合はnull）
+export async function getSharedBingoLayout(): Promise<SharedBingoLayout | null> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get shared bingo layout: database not available");
+    return null;
+  }
+
+  const result = await db.select().from(sharedBingoLayout).limit(1);
+  return result.length > 0 ? result[0]! : null;
+}
+
+// 共通カード配置を保存（1レコードのみ：存在すれば更新、なければ作成）
+export async function upsertSharedBingoLayout(gridData: string): Promise<void> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot upsert shared bingo layout: database not available");
+    return;
+  }
+
+  try {
+    const existing = await getSharedBingoLayout();
+    if (existing) {
+      await db
+        .update(sharedBingoLayout)
+        .set({ gridData, updatedAt: new Date() })
+        .where(eq(sharedBingoLayout.id, existing.id));
+    } else {
+      await db.insert(sharedBingoLayout).values({ gridData });
+    }
+  } catch (error) {
+    console.error("[Database] Failed to upsert shared bingo layout:", error);
+    throw error;
+  }
+}
+
+// 共通カード配置を削除（管理者用リセット）
+export async function resetSharedBingoLayout(): Promise<void> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot reset shared bingo layout: database not available");
+    return;
+  }
+
+  try {
+    await db.delete(sharedBingoLayout);
+  } catch (error) {
+    console.error("[Database] Failed to reset shared bingo layout:", error);
+    throw error;
+  }
+}

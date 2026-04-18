@@ -1,33 +1,50 @@
-import { useAuth } from '@/_core/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { trpc } from '@/lib/trpc';
-import { ArrowLeft, RefreshCw, Trash2, Trophy, Shield } from 'lucide-react';
+import { ArrowLeft, RefreshCw, Trash2, Trophy, Shield, Lock } from 'lucide-react';
 import { Link } from 'wouter';
 import { toast } from 'sonner';
 import { useState } from 'react';
 import { getTeamColor } from '@shared/teamColors';
 
 /**
- * 管理者画面
+ * 管理者画面（パスワード認証）
+ * - パスワード: bowlinglover
  * - 全チームの状態確認
- * - 全チームリセット
+ * - 全チームリセット（共通カードも含む）
  * - 個別チームリセット
+ * - 共通カード配置リセット
  */
 export default function Admin() {
-  const { user, isAuthenticated } = useAuth();
   const utils = trpc.useUtils();
+  const [password, setPassword] = useState('');
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authError, setAuthError] = useState('');
   const [confirmReset, setConfirmReset] = useState(false);
 
-  const { data: teamStates, isLoading } = trpc.admin.getAllTeamStates.useQuery(undefined, {
-    refetchInterval: 3000,
-    enabled: isAuthenticated && user?.role === 'admin',
+  const verifyMutation = trpc.admin.verifyPassword.useMutation({
+    onSuccess: () => {
+      setIsAuthenticated(true);
+      setAuthError('');
+    },
+    onError: () => {
+      setAuthError('パスワードが正しくありません');
+    },
   });
+
+  const { data: teamStates, isLoading } = trpc.admin.getAllTeamStates.useQuery(
+    { password },
+    {
+      refetchInterval: 3000,
+      enabled: isAuthenticated,
+    }
+  );
 
   const resetAllMutation = trpc.admin.resetAllTeams.useMutation({
     onSuccess: () => {
-      toast.success('全チームのデータをリセットしました');
+      toast.success('全チームのデータをリセットしました（共通カードも含む）');
       utils.admin.getAllTeamStates.invalidate();
       utils.team.getRankings.invalidate();
+      utils.team.getSharedLayout.invalidate();
       setConfirmReset(false);
     },
     onError: (err) => {
@@ -46,21 +63,60 @@ export default function Admin() {
     },
   });
 
-  // 未認証または管理者でない場合
-  if (!isAuthenticated || user?.role !== 'admin') {
+  const resetSharedLayoutMutation = trpc.admin.resetSharedLayout.useMutation({
+    onSuccess: () => {
+      toast.success('共通カード配置をリセットしました。次回アクセス時に新しいカードが生成されます。');
+      utils.team.getSharedLayout.invalidate();
+    },
+    onError: (err) => {
+      toast.error(`エラー: ${err.message}`);
+    },
+  });
+
+  // パスワード認証画面
+  if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
-        <div className="bg-card border-2 border-neon-pink rounded-lg p-8 text-center max-w-sm" style={{
-          boxShadow: '0 0 30px rgba(255, 0, 110, 0.4)'
+        <div className="bg-card border-2 border-neon-cyan rounded-lg p-8 text-center max-w-sm w-full" style={{
+          boxShadow: '0 0 30px rgba(0, 245, 255, 0.4)'
         }}>
-          <Shield size={48} className="text-neon-pink mx-auto mb-4" />
-          <h1 className="text-neon-pink font-bold text-xl mb-2">アクセス拒否</h1>
-          <p className="text-neon-cyan text-sm mb-6">管理者権限が必要です</p>
-          <Link href="/">
-            <Button className="bg-neon-cyan text-background font-bold">
-              ホームに戻る
+          <Lock size={48} className="text-neon-cyan mx-auto mb-4" style={{
+            filter: 'drop-shadow(0 0 10px rgba(0, 245, 255, 0.8))'
+          }} />
+          <h1 className="text-neon-cyan font-bold text-xl mb-1">管理者画面</h1>
+          <p className="text-neon-cyan text-xs opacity-60 mb-6">BOWLING BINGO ADMIN</p>
+
+          <div className="space-y-3">
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') verifyMutation.mutate({ password });
+              }}
+              placeholder="パスワードを入力"
+              className="w-full bg-dark-card border-2 border-neon-cyan rounded-lg px-4 py-3 text-neon-cyan placeholder-neon-cyan placeholder-opacity-40 focus:outline-none focus:border-neon-yellow transition-colors text-center font-mono"
+            />
+            {authError && (
+              <p className="text-neon-pink text-xs">{authError}</p>
+            )}
+            <Button
+              onClick={() => verifyMutation.mutate({ password })}
+              disabled={verifyMutation.isPending || !password}
+              className="w-full bg-neon-cyan text-background font-bold hover:bg-neon-yellow transition-colors"
+            >
+              {verifyMutation.isPending ? '確認中...' : '入室する'}
             </Button>
-          </Link>
+            <Link href="/">
+              <Button
+                variant="outline"
+                className="w-full border-neon-cyan text-neon-cyan hover:bg-neon-cyan hover:text-background"
+              >
+                <ArrowLeft size={16} className="mr-2" />
+                ホームに戻る
+              </Button>
+            </Link>
+          </div>
         </div>
       </div>
     );
@@ -94,6 +150,11 @@ export default function Admin() {
             </h1>
             <p className="text-neon-cyan text-xs">BOWLING BINGO ADMIN</p>
           </div>
+          <div className="ml-auto">
+            <Shield size={20} className="text-neon-yellow" style={{
+              filter: 'drop-shadow(0 0 6px rgba(255, 190, 11, 0.8))'
+            }} />
+          </div>
         </div>
 
         {/* 全チームリセットボタン */}
@@ -102,7 +163,7 @@ export default function Admin() {
         }}>
           <h2 className="text-neon-pink font-bold text-sm mb-3 flex items-center gap-2">
             <Trash2 size={16} />
-            全チームリセット
+            全チームリセット（共通カード含む）
           </h2>
           {!confirmReset ? (
             <Button
@@ -116,7 +177,7 @@ export default function Admin() {
               <p className="text-neon-yellow text-xs text-center mb-2">本当にリセットしますか？この操作は取り消せません。</p>
               <div className="flex gap-2">
                 <Button
-                  onClick={() => resetAllMutation.mutate()}
+                  onClick={() => resetAllMutation.mutate({ password })}
                   disabled={resetAllMutation.isPending}
                   className="flex-1 bg-neon-pink text-background font-bold hover:bg-red-500"
                 >
@@ -134,12 +195,32 @@ export default function Admin() {
           )}
         </div>
 
-        {/* チーム別状態テーブル */}
-        <div className="bg-card border-2 border-neon-yellow rounded-lg p-4" style={{
+        {/* 共通カードのみリセット */}
+        <div className="bg-card border-2 border-neon-yellow rounded-lg p-4 mb-4" style={{
           boxShadow: '0 0 15px rgba(255, 190, 11, 0.3)'
         }}>
+          <h2 className="text-neon-yellow font-bold text-sm mb-3 flex items-center gap-2">
+            <RefreshCw size={16} />
+            共通カード配置のリセット
+          </h2>
+          <p className="text-neon-cyan text-xs mb-3 opacity-70">
+            全チームで共有するビンゴカードの配置を新しくします。次回アクセス時に新しいカードが生成されます。
+          </p>
+          <Button
+            onClick={() => resetSharedLayoutMutation.mutate({ password })}
+            disabled={resetSharedLayoutMutation.isPending}
+            className="w-full bg-transparent border-2 border-neon-yellow text-neon-yellow hover:bg-neon-yellow hover:text-background font-bold transition-all"
+          >
+            {resetSharedLayoutMutation.isPending ? '処理中...' : '共通カードをリセット'}
+          </Button>
+        </div>
+
+        {/* チーム別状態テーブル */}
+        <div className="bg-card border-2 border-neon-cyan rounded-lg p-4" style={{
+          boxShadow: '0 0 15px rgba(0, 245, 255, 0.3)'
+        }}>
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-neon-yellow font-bold text-sm flex items-center gap-2">
+            <h2 className="text-neon-cyan font-bold text-sm flex items-center gap-2">
               <Trophy size={16} />
               チーム別状態
             </h2>
@@ -200,7 +281,7 @@ export default function Admin() {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => resetTeamMutation.mutate({ teamNumber: team.teamNumber })}
+                          onClick={() => resetTeamMutation.mutate({ teamNumber: team.teamNumber, password })}
                           disabled={resetTeamMutation.isPending}
                           className="h-6 px-2 text-xs transition-all"
                           style={{

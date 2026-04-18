@@ -1,10 +1,21 @@
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
+import { publicProcedure, router } from "./_core/trpc";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { getTeamBingoState, upsertTeamBingoState, getAllTeamRankings, resetAllTeams, resetTeam } from "./db";
+import {
+  getTeamBingoState,
+  upsertTeamBingoState,
+  getAllTeamRankings,
+  resetAllTeams,
+  resetTeam,
+  getSharedBingoLayout,
+  upsertSharedBingoLayout,
+  resetSharedBingoLayout,
+} from "./db";
+
+const ADMIN_PASSWORD = "bowlinglover";
 
 export const appRouter = router({
   system: systemRouter,
@@ -21,7 +32,27 @@ export const appRouter = router({
 
   // チーム管理ルーター
   team: router({
-    // チームビンゴ状態を取得
+    // 共通カード配置を取得
+    getSharedLayout: publicProcedure
+      .query(async () => {
+        const layout = await getSharedBingoLayout();
+        if (!layout) return null;
+        return layout.gridData; // JSON文字列のまま返す
+      }),
+
+    // 共通カード配置を保存（初回のみ作成、以降は無視）
+    initSharedLayout: publicProcedure
+      .input(z.object({ gridData: z.string() }))
+      .mutation(async ({ input }) => {
+        const existing = await getSharedBingoLayout();
+        if (!existing) {
+          // まだ存在しない場合のみ作成
+          await upsertSharedBingoLayout(input.gridData);
+        }
+        return { success: true };
+      }),
+
+    // チームビンゴ状態を取得（markedCellsとtotalScoreのみ）
     getBingoState: publicProcedure
       .input(z.object({ teamNumber: z.number().min(1).max(10) }))
       .query(async ({ input }) => {
@@ -32,7 +63,7 @@ export const appRouter = router({
         return state;
       }),
 
-    // チームビンゴ状態を更新
+    // チームビンゴ状態を更新（markedCells・completedLines・totalScoreのみ）
     updateBingoState: publicProcedure
       .input(z.object({
         teamNumber: z.number().min(1).max(10),
@@ -71,34 +102,47 @@ export const appRouter = router({
       }),
   }),
 
-  // 管理者専用ルーター
+  // 管理者専用ルーター（パスワード認証）
   admin: router({
-    // 全チームリセット（管理者のみ）
-    resetAllTeams: protectedProcedure
-      .mutation(async ({ ctx }) => {
-        if (ctx.user.role !== 'admin') {
-          throw new TRPCError({ code: 'FORBIDDEN', message: '管理者権限が必要です' });
+    // パスワード認証
+    verifyPassword: publicProcedure
+      .input(z.object({ password: z.string() }))
+      .mutation(async ({ input }) => {
+        if (input.password !== ADMIN_PASSWORD) {
+          throw new TRPCError({ code: 'UNAUTHORIZED', message: 'パスワードが正しくありません' });
         }
-        await resetAllTeams();
         return { success: true };
       }),
 
-    // 特定チームリセット（管理者のみ）
-    resetTeam: protectedProcedure
-      .input(z.object({ teamNumber: z.number().min(1).max(10) }))
-      .mutation(async ({ ctx, input }) => {
-        if (ctx.user.role !== 'admin') {
-          throw new TRPCError({ code: 'FORBIDDEN', message: '管理者権限が必要です' });
+    // 全チームリセット（パスワード認証済み）
+    resetAllTeams: publicProcedure
+      .input(z.object({ password: z.string() }))
+      .mutation(async ({ input }) => {
+        if (input.password !== ADMIN_PASSWORD) {
+          throw new TRPCError({ code: 'UNAUTHORIZED', message: 'パスワードが正しくありません' });
+        }
+        await resetAllTeams();
+        await resetSharedBingoLayout(); // 共通カードもリセット
+        return { success: true };
+      }),
+
+    // 特定チームリセット（パスワード認証済み）
+    resetTeam: publicProcedure
+      .input(z.object({ teamNumber: z.number().min(1).max(10), password: z.string() }))
+      .mutation(async ({ input }) => {
+        if (input.password !== ADMIN_PASSWORD) {
+          throw new TRPCError({ code: 'UNAUTHORIZED', message: 'パスワードが正しくありません' });
         }
         await resetTeam(input.teamNumber);
         return { success: true };
       }),
 
-    // 全チームの詳細状態を取得（管理者のみ）
-    getAllTeamStates: protectedProcedure
-      .query(async ({ ctx }) => {
-        if (ctx.user.role !== 'admin') {
-          throw new TRPCError({ code: 'FORBIDDEN', message: '管理者権限が必要です' });
+    // 全チームの詳細状態を取得（パスワード認証済み）
+    getAllTeamStates: publicProcedure
+      .input(z.object({ password: z.string() }))
+      .query(async ({ input }) => {
+        if (input.password !== ADMIN_PASSWORD) {
+          throw new TRPCError({ code: 'UNAUTHORIZED', message: 'パスワードが正しくありません' });
         }
         const rankings = await getAllTeamRankings();
         return rankings.map(r => ({
@@ -114,6 +158,17 @@ export const appRouter = router({
           })(),
           updatedAt: r.updatedAt,
         }));
+      }),
+
+    // 共通カード配置を強制リセット（新しいカードを生成）
+    resetSharedLayout: publicProcedure
+      .input(z.object({ password: z.string() }))
+      .mutation(async ({ input }) => {
+        if (input.password !== ADMIN_PASSWORD) {
+          throw new TRPCError({ code: 'UNAUTHORIZED', message: 'パスワードが正しくありません' });
+        }
+        await resetSharedBingoLayout();
+        return { success: true };
       }),
   }),
 });

@@ -2,8 +2,6 @@ import { describe, expect, it } from "vitest";
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
 
-type AuthenticatedUser = NonNullable<TrpcContext["user"]>;
-
 function createPublicContext(): TrpcContext {
   return {
     user: null,
@@ -12,43 +10,76 @@ function createPublicContext(): TrpcContext {
   };
 }
 
-function createAdminContext(): TrpcContext {
-  const user: AuthenticatedUser = {
-    id: 1,
-    openId: "admin-user",
-    email: "admin@example.com",
-    name: "Admin User",
-    loginMethod: "google",
-    role: "admin",
-    createdAt: new Date(),
-    updatedAt: new Date(),
-    lastSignedIn: new Date(),
-  };
-  return {
-    user,
-    req: { protocol: "https", headers: {} } as TrpcContext["req"],
-    res: {} as TrpcContext["res"],
-  };
-}
+const VALID_PASSWORD = "bowlinglover";
+const INVALID_PASSWORD = "wrongpassword";
 
-function createUserContext(): TrpcContext {
-  const user: AuthenticatedUser = {
-    id: 2,
-    openId: "regular-user",
-    email: "user@example.com",
-    name: "Regular User",
-    loginMethod: "google",
-    role: "user",
-    createdAt: new Date(),
-    updatedAt: new Date(),
-    lastSignedIn: new Date(),
-  };
-  return {
-    user,
-    req: { protocol: "https", headers: {} } as TrpcContext["req"],
-    res: {} as TrpcContext["res"],
-  };
-}
+describe("admin.verifyPassword", () => {
+  it("正しいパスワードで認証成功", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+    const result = await caller.admin.verifyPassword({ password: VALID_PASSWORD });
+    expect(result).toEqual({ success: true });
+  });
+
+  it("間違ったパスワードでエラー", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+    await expect(
+      caller.admin.verifyPassword({ password: INVALID_PASSWORD })
+    ).rejects.toThrow("パスワードが正しくありません");
+  });
+});
+
+describe("admin.resetAllTeams", () => {
+  it("正しいパスワードで全チームリセット成功", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+    const result = await caller.admin.resetAllTeams({ password: VALID_PASSWORD });
+    expect(result).toEqual({ success: true });
+  });
+
+  it("間違ったパスワードでエラー", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+    await expect(
+      caller.admin.resetAllTeams({ password: INVALID_PASSWORD })
+    ).rejects.toThrow("パスワードが正しくありません");
+  });
+});
+
+describe("admin.resetTeam", () => {
+  it("正しいパスワードで特定チームリセット成功", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+    const result = await caller.admin.resetTeam({ teamNumber: 4, password: VALID_PASSWORD });
+    expect(result).toEqual({ success: true });
+  });
+
+  it("間違ったパスワードでエラー", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+    await expect(
+      caller.admin.resetTeam({ teamNumber: 4, password: INVALID_PASSWORD })
+    ).rejects.toThrow("パスワードが正しくありません");
+  });
+});
+
+describe("admin.resetSharedLayout", () => {
+  it("正しいパスワードで共通カードリセット成功", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+    const result = await caller.admin.resetSharedLayout({ password: VALID_PASSWORD });
+    expect(result).toEqual({ success: true });
+  });
+
+  it("間違ったパスワードでエラー", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+    await expect(
+      caller.admin.resetSharedLayout({ password: INVALID_PASSWORD })
+    ).rejects.toThrow("パスワードが正しくありません");
+  });
+});
 
 describe("team.getBingoState", () => {
   it("チーム番号が範囲外の場合はエラーになる", async () => {
@@ -76,38 +107,19 @@ describe("team.getRankings", () => {
   });
 });
 
-describe("admin.resetTeam", () => {
-  it("管理者でないユーザーはFORBIDDENエラーになる", async () => {
-    const caller = appRouter.createCaller(createUserContext());
-    await expect(caller.admin.resetTeam({ teamNumber: 1 })).rejects.toThrow();
-  });
-
-  it("未認証ユーザーはエラーになる", async () => {
-    const caller = appRouter.createCaller(createPublicContext());
-    await expect(caller.admin.resetTeam({ teamNumber: 1 })).rejects.toThrow();
-  });
-});
-
-describe("admin.resetAllTeams", () => {
-  it("管理者でないユーザーはFORBIDDENエラーになる", async () => {
-    const caller = appRouter.createCaller(createUserContext());
-    await expect(caller.admin.resetAllTeams()).rejects.toThrow();
-  });
-
-  it("未認証ユーザーはエラーになる", async () => {
-    const caller = appRouter.createCaller(createPublicContext());
-    await expect(caller.admin.resetAllTeams()).rejects.toThrow();
-  });
-});
-
 describe("admin.getAllTeamStates", () => {
-  it("管理者でないユーザーはFORBIDDENエラーになる", async () => {
-    const caller = appRouter.createCaller(createUserContext());
-    await expect(caller.admin.getAllTeamStates()).rejects.toThrow();
+  it("正しいパスワードで全チーム状態を取得できる", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+    const result = await caller.admin.getAllTeamStates({ password: VALID_PASSWORD });
+    expect(Array.isArray(result)).toBe(true);
   });
 
-  it("未認証ユーザーはエラーになる", async () => {
-    const caller = appRouter.createCaller(createPublicContext());
-    await expect(caller.admin.getAllTeamStates()).rejects.toThrow();
+  it("間違ったパスワードでエラー", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+    await expect(
+      caller.admin.getAllTeamStates({ password: INVALID_PASSWORD })
+    ).rejects.toThrow("パスワードが正しくありません");
   });
 });

@@ -39,3 +39,14 @@ export const teamBingoStates = mysqlTable("teamBingoStates", {
 
 export type TeamBingoState = typeof teamBingoStates.$inferSelect;
 export type InsertTeamBingoState = typeof teamBingoStates.$inferInsert;
+
+// 全チーム共通ビンゴカード配置テーブル（1レコードのみ）
+export const sharedBingoLayout = mysqlTable("sharedBingoLayout", {
+  id: int("id").autoincrement().primaryKey(),
+  gridData: text("gridData").notNull(), // JSON形式の共通グリッド配置
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type SharedBingoLayout = typeof sharedBingoLayout.$inferSelect;
+export type InsertSharedBingoLayout = typeof sharedBingoLayout.$inferInsert;
