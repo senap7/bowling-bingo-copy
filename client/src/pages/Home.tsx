@@ -6,9 +6,10 @@ import { useAuth } from '@/_core/hooks/useAuth';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { trpc } from '@/lib/trpc';
 import { Link } from 'wouter';
+import { getTeamColor, TEAM_COLORS } from '@shared/teamColors';
 
 /**
- * ランキングテーブルコンポーネント
+ * ランキングテーブルコンポーネント（チームカラー対応）
  */
 function RankingTable() {
   const { data: rankings, isLoading } = trpc.team.getRankings.useQuery(undefined, {
@@ -64,43 +65,52 @@ function RankingTable() {
             </tr>
           </thead>
           <tbody>
-            {rankings.map((team, index) => (
-              <tr key={team.teamNumber} className="border-b border-neon-cyan border-opacity-10">
-                <td className="py-2 text-left">
-                  <span className={`font-bold ${
-                    index === 0 ? 'text-neon-yellow' :
-                    index === 1 ? 'text-gray-300' :
-                    index === 2 ? 'text-amber-600' :
-                    'text-neon-cyan opacity-60'
-                  }`}>
-                    {index + 1}
-                  </span>
-                </td>
-                <td className="py-2 text-neon-cyan font-mono">
-                  チーム {team.teamNumber}
-                </td>
-                <td className="py-2 text-center">
-                  {team.completedLines > 0 ? (
-                    <span className="text-neon-pink font-bold" style={{
-                      textShadow: '0 0 8px rgba(255, 0, 110, 0.6)'
-                    }}>
-                      {team.completedLines}
+            {rankings.map((team, index) => {
+              const tc = getTeamColor(team.teamNumber);
+              return (
+                <tr key={team.teamNumber} className="border-b border-neon-cyan border-opacity-10">
+                  <td className="py-2 text-left">
+                    <span className={`font-bold ${
+                      index === 0 ? 'text-neon-yellow' :
+                      index === 1 ? 'text-gray-300' :
+                      index === 2 ? 'text-amber-600' :
+                      'text-neon-cyan opacity-60'
+                    }`}>
+                      {index + 1}
                     </span>
-                  ) : (
-                    <span className="text-neon-cyan opacity-40">-</span>
-                  )}
-                </td>
-                <td className="py-2 text-right">
-                  <span className={`font-bold font-mono ${
-                    index === 0 ? 'text-neon-yellow' : 'text-neon-cyan'
-                  }`} style={index === 0 ? {
-                    textShadow: '0 0 10px rgba(255, 190, 11, 0.8)'
-                  } : {}}>
-                    {team.totalScore}
-                  </span>
-                </td>
-              </tr>
-            ))}
+                  </td>
+                  <td className="py-2 font-mono font-bold" style={{
+                    color: tc.color,
+                    textShadow: `0 0 8px ${tc.glow}`,
+                  }}>
+                    <span className="inline-block w-2 h-2 rounded-full mr-2" style={{ backgroundColor: tc.color }} />
+                    チーム {team.teamNumber}
+                  </td>
+                  <td className="py-2 text-center">
+                    {team.completedLines > 0 ? (
+                      <span className="font-bold" style={{
+                        color: tc.color,
+                        textShadow: `0 0 8px ${tc.glow}`,
+                      }}>
+                        {team.completedLines}
+                      </span>
+                    ) : (
+                      <span className="text-neon-cyan opacity-40">-</span>
+                    )}
+                  </td>
+                  <td className="py-2 text-right">
+                    <span className="font-bold font-mono" style={{
+                      color: index === 0 ? '#ffbe0b' : tc.color,
+                      textShadow: index === 0
+                        ? '0 0 10px rgba(255, 190, 11, 0.8)'
+                        : `0 0 8px ${tc.glow}`,
+                    }}>
+                      {team.totalScore}
+                    </span>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -120,6 +130,9 @@ export default function Home() {
   const utils = trpc.useUtils();
 
   const { grid, totalScore, completedLines, toggleCell, resetGame, isLineCompleted, isLoading } = useTeamBingoBowling(selectedTeam);
+
+  // 現在のチームカラー
+  const teamColor = getTeamColor(selectedTeam);
 
   // チーム変更時にキャッシュを無効化
   const handleTeamChange = (value: string) => {
@@ -165,7 +178,9 @@ export default function Home() {
       {/* ビンゴエフェクト背景 */}
       {showBingoEffect && (
         <div className="fixed inset-0 pointer-events-none">
-          <div className="absolute inset-0 animate-pulse bg-gradient-to-r from-neon-pink via-neon-cyan to-neon-yellow opacity-30" />
+          <div className="absolute inset-0 animate-pulse opacity-30" style={{
+            background: `linear-gradient(to right, ${teamColor.color}, #00f5ff, #ffbe0b)`
+          }} />
           {particles.map(particle => (
             <div
               key={particle.id}
@@ -173,7 +188,7 @@ export default function Home() {
               style={{
                 left: `${particle.x}%`,
                 top: `${particle.y}%`,
-                backgroundColor: ['#ff006e', '#00f5ff', '#ffbe0b'][Math.floor(Math.random() * 3)],
+                backgroundColor: teamColor.color,
               }}
             />
           ))}
@@ -196,20 +211,35 @@ export default function Home() {
 
       {/* チーム選択 */}
       <div className="mb-6 z-10">
-        <div className="flex items-center gap-3 bg-card border-2 border-neon-cyan rounded-lg p-3 md:p-4 backdrop-blur-sm" style={{
-          boxShadow: '0 0 15px rgba(0, 245, 255, 0.3)'
+        <div className="flex items-center gap-3 bg-card border-2 rounded-lg p-3 md:p-4 backdrop-blur-sm transition-all duration-500" style={{
+          borderColor: teamColor.color,
+          boxShadow: `0 0 15px ${teamColor.glow}`,
         }}>
-          <label className="text-neon-cyan text-sm md:text-base font-bold">チーム:</label>
+          <label className="text-sm md:text-base font-bold transition-colors duration-500" style={{ color: teamColor.color }}>
+            チーム:
+          </label>
           <Select value={selectedTeam.toString()} onValueChange={handleTeamChange}>
-            <SelectTrigger className="w-20 md:w-24 bg-dark-card border-neon-cyan text-neon-cyan">
+            <SelectTrigger className="w-20 md:w-24 bg-dark-card" style={{
+              borderColor: teamColor.color,
+              color: teamColor.color,
+            }}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent className="bg-dark-card border-neon-cyan">
-              {Array.from({ length: 10 }, (_, i) => i + 1).map(team => (
-                <SelectItem key={team} value={team.toString()} className="text-neon-cyan hover:bg-neon-pink hover:text-background">
-                  {team}
-                </SelectItem>
-              ))}
+              {Array.from({ length: 10 }, (_, i) => i + 1).map(team => {
+                const tc = TEAM_COLORS[team];
+                return (
+                  <SelectItem
+                    key={team}
+                    value={team.toString()}
+                    className="font-bold"
+                    style={{ color: tc?.color }}
+                  >
+                    <span className="inline-block w-2 h-2 rounded-full mr-2" style={{ backgroundColor: tc?.color }} />
+                    チーム {team}（{tc?.name}）
+                  </SelectItem>
+                );
+              })}
             </SelectContent>
           </Select>
         </div>
@@ -217,10 +247,11 @@ export default function Home() {
 
       {/* スコア表示 */}
       <div className="mb-6 z-10">
-        <div className="bg-card border-2 border-neon-cyan rounded-lg p-4 md:p-6 text-center backdrop-blur-sm" style={{
-          boxShadow: '0 0 20px rgba(0, 245, 255, 0.5), inset 0 0 20px rgba(0, 245, 255, 0.1)'
+        <div className="bg-card border-2 rounded-lg p-4 md:p-6 text-center backdrop-blur-sm transition-all duration-500" style={{
+          borderColor: teamColor.color,
+          boxShadow: `0 0 20px ${teamColor.glow}, inset 0 0 20px ${teamColor.glow.replace('0.7', '0.1')}`,
         }}>
-          <p className="text-neon-cyan text-sm mb-2">SCORE</p>
+          <p className="text-sm mb-2 font-bold" style={{ color: teamColor.color }}>SCORE</p>
           <p className="text-4xl md:text-5xl font-bold text-neon-yellow transition-all duration-300" style={{
             textShadow: '0 0 20px rgba(255, 190, 11, 0.8)',
             transform: showBingoEffect ? 'scale(1.1)' : 'scale(1)',
@@ -228,8 +259,9 @@ export default function Home() {
             {totalScore}
           </p>
           {completedLines.length > 0 && (
-            <p className="text-neon-pink text-sm mt-2 flex items-center justify-center gap-1" style={{
-              textShadow: '0 0 10px rgba(255, 0, 110, 0.6)'
+            <p className="text-sm mt-2 flex items-center justify-center gap-1 font-bold" style={{
+              color: teamColor.color,
+              textShadow: `0 0 10px ${teamColor.glow}`,
             }}>
               <Zap size={16} />
               ビンゴ: {completedLines.length}
@@ -245,8 +277,9 @@ export default function Home() {
         </div>
       ) : (
         <div className="mb-8 z-10">
-          <div className="grid grid-cols-5 gap-2 md:gap-3 p-4 md:p-6 bg-card border-2 border-neon-pink rounded-lg backdrop-blur-sm" style={{
-            boxShadow: '0 0 30px rgba(255, 0, 110, 0.4), inset 0 0 30px rgba(255, 0, 110, 0.05)'
+          <div className="grid grid-cols-5 gap-2 md:gap-3 p-4 md:p-6 bg-card border-2 rounded-lg backdrop-blur-sm transition-all duration-500" style={{
+            borderColor: teamColor.color,
+            boxShadow: `0 0 30px ${teamColor.glow}, inset 0 0 30px ${teamColor.glow.replace('0.7', '0.05')}`,
           }}>
             {grid.map((row, rowIndex) =>
               row.map((cell, colIndex) => {
@@ -263,17 +296,19 @@ export default function Home() {
                       transition-all duration-300
                       flex items-center justify-center
                       border-2
-                      ${cell.marked
-                        ? 'bg-neon-pink text-background border-neon-pink'
-                        : 'bg-dark-card text-neon-cyan border-neon-cyan hover:border-neon-yellow'
-                      }
-                      ${isCompleted && cell.marked ? 'ring-2 ring-neon-yellow animate-neon-pulse' : ''}
                       ${isAnimating ? 'scale-110' : 'scale-100'}
                     `}
-                    style={{
-                      boxShadow: cell.marked
-                        ? `0 0 15px rgba(255, 0, 110, 0.8), inset 0 0 10px rgba(255, 0, 110, 0.3)`
-                        : `0 0 10px rgba(0, 245, 255, 0.3)`,
+                    style={cell.marked ? {
+                      backgroundColor: teamColor.markedBg,
+                      color: teamColor.markedText,
+                      borderColor: teamColor.color,
+                      boxShadow: `0 0 15px ${teamColor.glow}, inset 0 0 10px ${teamColor.glow.replace('0.7', '0.3')}`,
+                      outline: isCompleted ? `2px solid #ffbe0b` : undefined,
+                    } : {
+                      backgroundColor: 'var(--dark-card, #0d1b2a)',
+                      color: teamColor.color,
+                      borderColor: teamColor.color,
+                      boxShadow: `0 0 8px ${teamColor.glow.replace('0.7', '0.3')}`,
                     }}
                   >
                     <span>{cell.score}</span>
@@ -289,9 +324,12 @@ export default function Home() {
       <div className="z-10 mb-8">
         <Button
           onClick={resetGame}
-          className="bg-neon-purple hover:bg-neon-pink text-background font-bold py-2 px-6 rounded-lg border-2 border-neon-cyan transition-all duration-300 flex items-center gap-2"
+          className="font-bold py-2 px-6 rounded-lg border-2 transition-all duration-300 flex items-center gap-2"
           style={{
-            boxShadow: '0 0 20px rgba(181, 55, 242, 0.6)'
+            backgroundColor: teamColor.markedBg,
+            color: teamColor.markedText,
+            borderColor: teamColor.color,
+            boxShadow: `0 0 20px ${teamColor.glow}`,
           }}
         >
           <RotateCcw size={20} />
@@ -320,9 +358,9 @@ export default function Home() {
 
       {/* 背景装飾 */}
       <div className="fixed inset-0 pointer-events-none opacity-10">
-        <div className="absolute top-10 right-10 w-32 h-32 bg-neon-pink rounded-full blur-3xl" />
+        <div className="absolute top-10 right-10 w-32 h-32 rounded-full blur-3xl transition-all duration-500" style={{ backgroundColor: teamColor.color }} />
         <div className="absolute bottom-20 left-10 w-40 h-40 bg-neon-cyan rounded-full blur-3xl" />
-        <div className="absolute top-1/2 right-1/4 w-32 h-32 bg-neon-yellow rounded-full blur-3xl" />
+        <div className="absolute top-1/2 right-1/4 w-32 h-32 rounded-full blur-3xl transition-all duration-500" style={{ backgroundColor: teamColor.color }} />
       </div>
     </div>
   );

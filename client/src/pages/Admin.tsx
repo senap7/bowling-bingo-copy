@@ -5,6 +5,7 @@ import { ArrowLeft, RefreshCw, Trash2, Trophy, Shield } from 'lucide-react';
 import { Link } from 'wouter';
 import { toast } from 'sonner';
 import { useState } from 'react';
+import { getTeamColor } from '@shared/teamColors';
 
 /**
  * 管理者画面
@@ -167,35 +168,53 @@ export default function Admin() {
                 </tr>
               </thead>
               <tbody>
-                {teamStates.map((team) => (
-                  <tr key={team.teamNumber} className="border-b border-neon-cyan border-opacity-10">
-                    <td className="py-2 text-neon-cyan font-mono font-bold">
-                      チーム {team.teamNumber}
-                    </td>
-                    <td className="py-2 text-center">
-                      {team.completedLines > 0 ? (
-                        <span className="text-neon-pink font-bold">{team.completedLines}</span>
-                      ) : (
-                        <span className="text-neon-cyan opacity-40">-</span>
-                      )}
-                    </td>
-                    <td className="py-2 text-right text-neon-yellow font-bold font-mono">
-                      {team.totalScore}
-                    </td>
-                    <td className="py-2 text-right">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => resetTeamMutation.mutate({ teamNumber: team.teamNumber })}
-                        disabled={resetTeamMutation.isPending}
-                        className="border-neon-pink text-neon-pink hover:bg-neon-pink hover:text-background h-6 px-2 text-xs"
-                      >
-                        <Trash2 size={10} className="mr-1" />
-                        リセット
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
+                {teamStates.map((team) => {
+                  const tc = getTeamColor(team.teamNumber);
+                  return (
+                    <tr key={team.teamNumber} className="border-b border-opacity-20" style={{ borderColor: tc.color }}>
+                      <td className="py-2 font-mono font-bold" style={{
+                        color: tc.color,
+                        textShadow: `0 0 6px ${tc.glow}`,
+                      }}>
+                        <span className="inline-block w-2 h-2 rounded-full mr-2" style={{ backgroundColor: tc.color }} />
+                        チーム {team.teamNumber}
+                        <span className="ml-1 opacity-60 text-xs">（{tc.name}）</span>
+                      </td>
+                      <td className="py-2 text-center">
+                        {team.completedLines > 0 ? (
+                          <span className="font-bold" style={{
+                            color: tc.color,
+                            textShadow: `0 0 6px ${tc.glow}`,
+                          }}>{team.completedLines}</span>
+                        ) : (
+                          <span className="text-neon-cyan opacity-40">-</span>
+                        )}
+                      </td>
+                      <td className="py-2 text-right font-bold font-mono" style={{
+                        color: tc.color,
+                        textShadow: `0 0 6px ${tc.glow}`,
+                      }}>
+                        {team.totalScore}
+                      </td>
+                      <td className="py-2 text-right">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => resetTeamMutation.mutate({ teamNumber: team.teamNumber })}
+                          disabled={resetTeamMutation.isPending}
+                          className="h-6 px-2 text-xs transition-all"
+                          style={{
+                            borderColor: tc.color,
+                            color: tc.color,
+                          }}
+                        >
+                          <Trash2 size={10} className="mr-1" />
+                          リセット
+                        </Button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}
