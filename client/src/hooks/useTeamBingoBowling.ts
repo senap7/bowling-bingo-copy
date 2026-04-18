@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { trpc } from '@/lib/trpc';
 
 export interface BingoCell {
@@ -163,11 +163,33 @@ const applyMarkedCells = (grid: BingoCell[][], markedStr: string): BingoCell[][]
   }
 };
 
+// markedCells文字列を比較して変化があるか確認
+const markedCellsEqual = (a: string, b: string): boolean => {
+  try {
+    const ma: Record<string, boolean> = JSON.parse(a);
+    const mb: Record<string, boolean> = JSON.parse(b);
+    for (let row = 0; row < 5; row++) {
+      for (let col = 0; col < 5; col++) {
+        const key = `${row}-${col}`;
+        if (!!ma[key] !== !!mb[key]) return false;
+      }
+    }
+    return true;
+  } catch {
+    return a === b;
+  }
+};
+
 export const useTeamBingoBowling = (teamNumber: number, onRankingRefresh?: () => void) => {
   const [grid, setGrid] = useState<BingoCell[][]>(() => generateBingoGrid());
   const [completedLines, setCompletedLines] = useState<string[]>([]);
   const [isInitialized, setIsInitialized] = useState(false);
   const utils = trpc.useUtils();
+
+  // 自分が最後に送信したmarkedCells（サーバーからの応答で上書きしないための比較用）
+  const pendingMutationRef = useRef(false);
+  // 現在のmarkedCells文字列（サーバーと比較するため）
+  const localMarkedCellsRef = useRef<string>('');
 
   // 全チーム共通のカード配置を取得
   const { data: sharedLayout, isLoading: isSharedLoading } = trpc.team.getSharedLayout.useQuery(
@@ -182,7 +204,7 @@ export const useTeamBingoBowling = (teamNumber: number, onRankingRefresh?: () =>
     },
   });
 
-  // サーバーからチーム状態を取得（markedCells・totalScore）
+  // サーバーからチーム状態を取得（markedCells・totalScore）- 2秒ごとポーリング
   const { data: teamState, isLoading: isTeamLoading } = trpc.team.getBingoState.useQuery(
     { teamNumber },
     { enabled: true, refetchInterval: 2000 }
@@ -194,15 +216,22 @@ export const useTeamBingoBowling = (teamNumber: number, onRankingRefresh?: () =>
       // ビンゴマス変更成功時にランキングを即座に再取得
       utils.team.getRankings.invalidate();
       onRankingRefresh?.();
+      // ミューテーション完了
+      pendingMutationRef.current = false;
+    },
+    onError: () => {
+      pendingMutationRef.current = false;
     },
   });
 
   // チーム番号が変更されたときはリセット
   useEffect(() => {
     setIsInitialized(false);
+    pendingMutationRef.current = false;
+    localMarkedCellsRef.current = '';
   }, [teamNumber]);
 
-  // 共通カード配置とチーム状態が揃ったら初期化
+  // 共通カード配置とチーム状態が揃ったら初期化（初回のみ）
   useEffect(() => {
     if (isInitialized) return;
     if (isSharedLoading || isTeamLoading) return;
@@ -211,33 +240,29 @@ export const useTeamBingoBowling = (teamNumber: number, onRankingRefresh?: () =>
       let baseGrid: BingoCell[][];
 
       if (sharedLayout) {
-        // 既存の共通カード配置を使用
         const parsed = stringToGrid(sharedLayout);
         baseGrid = parsed ?? generateBingoGrid();
 
         if (!parsed) {
-          // 不正な共通カードなら新しいものを生成してサーバーに保存
           initSharedLayoutMutation.mutate({ gridData: gridToString(baseGrid) });
         }
       } else {
-        // 共通カードがまだない → 新しいグリッドを生成してサーバーに保存
         baseGrid = generateBingoGrid();
         initSharedLayoutMutation.mutate({ gridData: gridToString(baseGrid) });
       }
 
       if (teamState) {
-        // チームのmarkedCells状態を共通グリッドに適用
         const gridWithMarked = applyMarkedCells(baseGrid, teamState.markedCells);
         const savedLines = (() => {
           try { return JSON.parse(teamState.completedLines); } catch { return []; }
         })();
         setGrid(gridWithMarked);
         setCompletedLines(savedLines);
+        localMarkedCellsRef.current = teamState.markedCells;
       } else {
-        // 新しいチーム：共通グリッドをそのまま使用、markedCellsは空
         setGrid(baseGrid);
         setCompletedLines([]);
-        // サーバーに初期状態を保存
+        localMarkedCellsRef.current = markedCellsToString(baseGrid);
         updateMutation.mutate({
           teamNumber,
           gridData: gridToString(baseGrid),
@@ -257,6 +282,37 @@ export const useTeamBingoBowling = (teamNumber: number, onRankingRefresh?: () =>
     }
   }, [sharedLayout, teamState, isSharedLoading, isTeamLoading, isInitialized, teamNumber]);
 
+  // ポーリングで取得したmarkedCellsをローカルグリッドに反映（他端末の変更を同期）
+  useEffect(() => {
+    if (!isInitialized) return;
+    if (!teamState) return;
+    // 自分が送信中の場合はスキップ（楽観的更新との競合を防ぐ）
+    if (pendingMutationRef.current) return;
+
+    const serverMarkedCells = teamState.markedCells;
+
+    // サーバーのmarkedCellsとローカルが異なる場合のみ更新
+    if (markedCellsEqual(serverMarkedCells, localMarkedCellsRef.current)) return;
+
+    // サーバーのmarkedCellsをローカルグリッドに反映
+    setGrid(prevGrid => {
+      const updated = applyMarkedCells(prevGrid, serverMarkedCells);
+      return updated;
+    });
+
+    // completedLinesもサーバーから反映
+    try {
+      const serverLines = JSON.parse(teamState.completedLines);
+      if (Array.isArray(serverLines)) {
+        setCompletedLines(serverLines);
+      }
+    } catch {
+      // ignore
+    }
+
+    localMarkedCellsRef.current = serverMarkedCells;
+  }, [teamState, isInitialized]);
+
   const totalScore = useMemo(() => calculateScore(grid, completedLines), [grid, completedLines]);
 
   const toggleCell = useCallback((row: number, col: number) => {
@@ -267,11 +323,17 @@ export const useTeamBingoBowling = (teamNumber: number, onRankingRefresh?: () =>
       const newCompletedLines = checkLines(newGrid);
       setCompletedLines(newCompletedLines);
 
+      const newMarkedCells = markedCellsToString(newGrid);
       const newScore = calculateScore(newGrid, newCompletedLines);
+
+      // ローカルの最新状態を記録（ポーリング上書きを防ぐ）
+      localMarkedCellsRef.current = newMarkedCells;
+      pendingMutationRef.current = true;
+
       updateMutation.mutate({
         teamNumber,
         gridData: gridToString(newGrid),
-        markedCells: markedCellsToString(newGrid),
+        markedCells: newMarkedCells,
         completedLines: JSON.stringify(newCompletedLines),
         totalScore: newScore,
       });
@@ -281,9 +343,9 @@ export const useTeamBingoBowling = (teamNumber: number, onRankingRefresh?: () =>
   }, [teamNumber, updateMutation]);
 
   const resetGame = useCallback(() => {
-    // チームのmarkedCellsのみリセット（共通カード配置は維持）
     setIsInitialized(false);
-    // 共通グリッドを再取得して適用
+    pendingMutationRef.current = false;
+    localMarkedCellsRef.current = '';
     utils.team.getSharedLayout.invalidate();
     updateMutation.mutate({
       teamNumber,
