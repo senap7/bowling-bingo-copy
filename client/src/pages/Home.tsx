@@ -1,8 +1,7 @@
 import { useTeamBingoBowling } from '@/hooks/useTeamBingoBowling';
 import { Button } from '@/components/ui/button';
 import { RotateCcw, Zap, Trophy, Shield } from 'lucide-react';
-import { useState, useEffect, useRef } from 'react';
-import { useAuth } from '@/_core/hooks/useAuth';
+import { useState, useEffect } from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { trpc } from '@/lib/trpc';
 import { Link } from 'wouter';
@@ -120,7 +119,6 @@ function RankingTable() {
  * ボウリングビンゴ - メインゲームページ
  */
 export default function Home() {
-  const { user } = useAuth();
   const [selectedTeam, setSelectedTeam] = useState<number>(1);
   const [animatingCells, setAnimatingCells] = useState<Set<string>>(new Set());
   const [showBingoEffect, setShowBingoEffect] = useState(false);
@@ -429,20 +427,18 @@ export default function Home() {
       <RankingTable />
 
       {/* 管理者リンク */}
-      {user?.role === 'admin' && (
-        <div className="z-10 mt-2 mb-8">
-          <Link href="/admin">
-            <Button
-              variant="outline"
-              className="border-neon-yellow text-neon-yellow hover:bg-neon-yellow hover:text-background font-bold py-2 px-6 rounded-lg transition-all duration-300 flex items-center gap-2"
-              style={{ boxShadow: '0 0 10px rgba(255, 190, 11, 0.4)' }}
-            >
-              <Shield size={16} />
-              管理者画面
-            </Button>
-          </Link>
-        </div>
-      )}
+      <div className="z-10 mt-2 mb-8">
+        <Link href="/admin">
+          <Button
+            variant="outline"
+            className="border-neon-yellow text-neon-yellow hover:bg-neon-yellow hover:text-background font-bold py-2 px-6 rounded-lg transition-all duration-300 flex items-center gap-2"
+            style={{ boxShadow: '0 0 10px rgba(255, 190, 11, 0.4)' }}
+          >
+            <Shield size={16} />
+            管理者画面
+          </Button>
+        </Link>
+      </div>
 
       {/* 背景装飾 */}
       <div className="fixed inset-0 pointer-events-none opacity-10">

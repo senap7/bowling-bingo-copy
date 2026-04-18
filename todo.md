@@ -29,3 +29,4 @@
 - [x] ランキング表にbingoScore/bowlingScore/totalCombinedScoreの3列を表示
 - [x] ランキングを合計スコア（totalCombinedScore）降順でソート
 - [x] テスト更新：updateBowlingScore・getRankings新フィールド対応（16テスト全合格）
+- [x] 管理者画面リンクを全ユーザーに表示（role条件を削除）
