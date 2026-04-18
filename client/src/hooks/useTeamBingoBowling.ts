@@ -138,14 +138,26 @@ const gridToString = (grid: BingoCell[][]): string => {
   return JSON.stringify(scoreGrid);
 };
 
-// JSON文字列をグリッドに変換
-const stringToGrid = (str: string): BingoCell[][] => {
-  const scoreGrid = JSON.parse(str);
-  return scoreGrid.map((row: any[]) => row.map((cell: any) => ({
-    id: cell.id,
-    score: cell.score,
-    marked: false,
-  })));
+// JSON文字列をグリッドに変換（不正データの場合はnullを返す）
+const stringToGrid = (str: string): BingoCell[][] | null => {
+  try {
+    const scoreGrid = JSON.parse(str);
+    // 5x5の正しい形式かどうかを検証
+    if (!Array.isArray(scoreGrid) || scoreGrid.length !== 5) return null;
+    for (const row of scoreGrid) {
+      if (!Array.isArray(row) || row.length !== 5) return null;
+      for (const cell of row) {
+        if (!cell || typeof cell.id !== 'string' || typeof cell.score !== 'string') return null;
+      }
+    }
+    return scoreGrid.map((row: any[]) => row.map((cell: any) => ({
+      id: cell.id,
+      score: cell.score,
+      marked: false,
+    })));
+  } catch {
+    return null;
+  }
 };
 
 // マーク状態をJSON文字列に変換
@@ -163,10 +175,17 @@ const markedCellsToString = (grid: BingoCell[][]): string => {
 const applyMarkedCells = (grid: BingoCell[][], markedStr: string): BingoCell[][] => {
   try {
     const marked: Record<string, boolean> = JSON.parse(markedStr);
-    const newGrid = grid.map(row => [...row]);
+    // gridが正しい5x5形式かどうかを検証
+    if (!Array.isArray(grid) || grid.length !== 5) return grid;
+    const newGrid = grid.map(row => {
+      if (!Array.isArray(row)) return row;
+      return [...row];
+    });
     for (let row = 0; row < 5; row++) {
+      if (!newGrid[row] || !Array.isArray(newGrid[row])) continue;
       for (let col = 0; col < 5; col++) {
-        newGrid[row][col].marked = marked[`${row}-${col}`] || false;
+        if (!newGrid[row][col]) continue;
+        newGrid[row][col] = { ...newGrid[row][col], marked: marked[`${row}-${col}`] || false };
       }
     }
     return newGrid;
@@ -199,7 +218,9 @@ export const useTeamBingoBowling = (teamNumber: number) => {
   useEffect(() => {
     if (teamState && !isInitialized) {
       try {
-        const newGrid = stringToGrid(teamState.gridData);
+        // gridDataが不正な場合はnullが返るのでフォールバックとして新規グリッドを生成
+        const parsedGrid = stringToGrid(teamState.gridData);
+        const newGrid = parsedGrid ?? generateBingoGrid();
         const newGridWithMarked = applyMarkedCells(newGrid, teamState.markedCells);
         const newCompletedLines = JSON.parse(teamState.completedLines);
         
