@@ -1,7 +1,7 @@
 import { useTeamBingoBowling } from '@/hooks/useTeamBingoBowling';
 import { Button } from '@/components/ui/button';
 import { RotateCcw, Zap, Trophy, Shield } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/_core/hooks/useAuth';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { trpc } from '@/lib/trpc';
@@ -9,7 +9,7 @@ import { Link } from 'wouter';
 import { getTeamColor, TEAM_COLORS } from '@shared/teamColors';
 
 /**
- * ランキングテーブルコンポーネント（チームカラー対応）
+ * ランキングテーブルコンポーネント（チームカラー対応・2種類スコア表示）
  */
 function RankingTable() {
   const { data: rankings, isLoading } = trpc.team.getRankings.useQuery(undefined, {
@@ -44,6 +44,9 @@ function RankingTable() {
     );
   }
 
+  // 合計スコア降順でソート
+  const sorted = [...rankings].sort((a, b) => b.totalCombinedScore - a.totalCombinedScore);
+
   return (
     <div className="z-10 w-full max-w-sm mb-6">
       <div className="bg-card border-2 border-neon-yellow rounded-lg p-4" style={{
@@ -58,14 +61,15 @@ function RankingTable() {
         <table className="w-full text-xs">
           <thead>
             <tr className="border-b border-neon-cyan border-opacity-30">
-              <th className="text-neon-cyan text-left pb-2 w-8">#</th>
+              <th className="text-neon-cyan text-left pb-2 w-6">#</th>
               <th className="text-neon-cyan text-left pb-2">チーム</th>
-              <th className="text-neon-cyan text-center pb-2">ビンゴ</th>
-              <th className="text-neon-cyan text-right pb-2">スコア</th>
+              <th className="text-neon-cyan text-center pb-2 text-nowrap">ビンゴ</th>
+              <th className="text-neon-cyan text-center pb-2 text-nowrap">ボウリング</th>
+              <th className="text-neon-cyan text-right pb-2 text-nowrap">合計</th>
             </tr>
           </thead>
           <tbody>
-            {rankings.map((team, index) => {
+            {sorted.map((team, index) => {
               const tc = getTeamColor(team.teamNumber);
               return (
                 <tr key={team.teamNumber} className="border-b border-neon-cyan border-opacity-10">
@@ -83,20 +87,14 @@ function RankingTable() {
                     color: tc.color,
                     textShadow: `0 0 8px ${tc.glow}`,
                   }}>
-                    <span className="inline-block w-2 h-2 rounded-full mr-2" style={{ backgroundColor: tc.color }} />
-                    チーム {team.teamNumber}
+                    <span className="inline-block w-2 h-2 rounded-full mr-1" style={{ backgroundColor: tc.color }} />
+                    チーム{team.teamNumber}
                   </td>
-                  <td className="py-2 text-center">
-                    {team.completedLines > 0 ? (
-                      <span className="font-bold" style={{
-                        color: tc.color,
-                        textShadow: `0 0 8px ${tc.glow}`,
-                      }}>
-                        {team.completedLines}
-                      </span>
-                    ) : (
-                      <span className="text-neon-cyan opacity-40">-</span>
-                    )}
+                  <td className="py-2 text-center font-mono" style={{ color: tc.color }}>
+                    {team.bingoScore}
+                  </td>
+                  <td className="py-2 text-center font-mono" style={{ color: tc.color }}>
+                    {team.bowlingScore > 0 ? team.bowlingScore : <span className="opacity-40">-</span>}
                   </td>
                   <td className="py-2 text-right">
                     <span className="font-bold font-mono" style={{
@@ -105,7 +103,7 @@ function RankingTable() {
                         ? '0 0 10px rgba(255, 190, 11, 0.8)'
                         : `0 0 8px ${tc.glow}`,
                     }}>
-                      {team.totalScore}
+                      {team.totalCombinedScore}
                     </span>
                   </td>
                 </tr>
@@ -127,6 +125,7 @@ export default function Home() {
   const [animatingCells, setAnimatingCells] = useState<Set<string>>(new Set());
   const [showBingoEffect, setShowBingoEffect] = useState(false);
   const [particles, setParticles] = useState<Array<{ id: string; x: number; y: number }>>([]);
+  const [bowlingScoreInput, setBowlingScoreInput] = useState<string>('');
   const utils = trpc.useUtils();
 
   const { grid, totalScore, completedLines, toggleCell, resetGame, isLineCompleted, isLoading } = useTeamBingoBowling(selectedTeam);
@@ -134,10 +133,53 @@ export default function Home() {
   // 現在のチームカラー
   const teamColor = getTeamColor(selectedTeam);
 
+  // チームのビンゴ状態を取得（bowlingScoreを読み込む）
+  const { data: teamState } = trpc.team.getBingoState.useQuery(
+    { teamNumber: selectedTeam },
+    { refetchInterval: 3000 }
+  );
+
+  // bowlingScoreをサーバーから読み込む
+  useEffect(() => {
+    if (teamState && teamState.bowlingScore !== undefined) {
+      setBowlingScoreInput(teamState.bowlingScore > 0 ? teamState.bowlingScore.toString() : '');
+    }
+  }, [teamState?.bowlingScore, selectedTeam]);
+
+  // ボウリング実スコア更新ミューテーション
+  const [bowlingScoreError, setBowlingScoreError] = useState<string | null>(null);
+  const updateBowlingScoreMutation = trpc.team.updateBowlingScore.useMutation({
+    onSuccess: () => {
+      utils.team.getRankings.invalidate();
+      utils.team.getBingoState.invalidate();
+      setBowlingScoreError(null);
+    },
+    onError: (err) => {
+      if (err.data?.code === 'NOT_FOUND') {
+        setBowlingScoreError('先にビンゴマスをタップしてチームを初期化してください');
+      } else {
+        setBowlingScoreError('保存に失敗しました。再度お試しください');
+      }
+    }
+  });
+
   // チーム変更時にキャッシュを無効化
   const handleTeamChange = (value: string) => {
     utils.team.getBingoState.invalidate();
     setSelectedTeam(parseInt(value));
+    setBowlingScoreInput('');
+    setBowlingScoreError(null);
+  };
+
+  // ボウリングスコア確定（Enterキーまたはフォーカスアウト）
+  const handleBowlingScoreCommit = () => {
+    const score = parseInt(bowlingScoreInput) || 0;
+    if (score >= 0) {
+      updateBowlingScoreMutation.mutate({
+        teamNumber: selectedTeam,
+        bowlingScore: score,
+      });
+    }
   };
 
   // ビンゴ達成時のエフェクト
@@ -172,6 +214,10 @@ export default function Home() {
     }, 300);
     toggleCell(row, col);
   };
+
+  // 合計スコア（ビンゴ + ボウリング）
+  const bowlingScore = parseInt(bowlingScoreInput) || (teamState?.bowlingScore ?? 0);
+  const combinedScore = totalScore + bowlingScore;
 
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col items-center justify-center p-4 relative overflow-hidden">
@@ -246,28 +292,69 @@ export default function Home() {
         </div>
       </div>
 
-      {/* スコア表示 */}
-      <div className="mb-6 z-10">
-        <div className="bg-card border-2 rounded-lg p-4 md:p-6 text-center backdrop-blur-sm transition-all duration-500" style={{
+      {/* スコア表示（2種類） */}
+      <div className="mb-6 z-10 w-full max-w-sm">
+        <div className="bg-card border-2 rounded-lg p-4 md:p-5 backdrop-blur-sm transition-all duration-500" style={{
           borderColor: teamColor.color,
           boxShadow: `0 0 20px ${teamColor.glow}, inset 0 0 20px ${teamColor.glow.replace('0.7', '0.1')}`,
         }}>
-          <p className="text-sm mb-2 font-bold" style={{ color: teamColor.color }}>SCORE</p>
-          <p className="text-4xl md:text-5xl font-bold text-neon-yellow transition-all duration-300" style={{
-            textShadow: '0 0 20px rgba(255, 190, 11, 0.8)',
-            transform: showBingoEffect ? 'scale(1.1)' : 'scale(1)',
-          }}>
-            {totalScore}
-          </p>
-          {completedLines.length > 0 && (
-            <p className="text-sm mt-2 flex items-center justify-center gap-1 font-bold" style={{
-              color: teamColor.color,
-              textShadow: `0 0 10px ${teamColor.glow}`,
-            }}>
-              <Zap size={16} />
-              ビンゴ: {completedLines.length}
-            </p>
-          )}
+          {/* 2カラムレイアウト：ビンゴスコア ＋ 合計スコア */}
+          <div className="flex gap-4 items-stretch">
+            {/* ビンゴスコア */}
+            <div className="flex-1 text-center border-r border-opacity-30" style={{ borderColor: teamColor.color }}>
+              <p className="text-xs mb-1 font-bold opacity-70" style={{ color: teamColor.color }}>ビンゴ</p>
+              <p className="text-3xl md:text-4xl font-bold text-neon-cyan transition-all duration-300" style={{
+                textShadow: '0 0 15px rgba(0, 245, 255, 0.8)',
+                transform: showBingoEffect ? 'scale(1.1)' : 'scale(1)',
+              }}>
+                {totalScore}
+              </p>
+              {completedLines.length > 0 && (
+                <p className="text-xs mt-1 flex items-center justify-center gap-1 font-bold" style={{
+                  color: teamColor.color,
+                }}>
+                  <Zap size={12} />
+                  {completedLines.length}列
+                </p>
+              )}
+            </div>
+
+            {/* ボウリング実スコア入力 */}
+            <div className="flex-1 text-center border-r border-opacity-30" style={{ borderColor: teamColor.color }}>
+              <p className="text-xs mb-1 font-bold opacity-70" style={{ color: teamColor.color }}>ボウリング</p>
+              <input
+                type="number"
+                min="0"
+                value={bowlingScoreInput}
+                onChange={(e) => setBowlingScoreInput(e.target.value)}
+                onBlur={handleBowlingScoreCommit}
+                onKeyDown={(e) => e.key === 'Enter' && handleBowlingScoreCommit()}
+                placeholder="0"
+                className="w-full text-center text-3xl md:text-4xl font-bold bg-transparent border-b-2 outline-none transition-colors duration-300 font-mono"
+                style={{
+                  color: teamColor.color,
+                  borderColor: teamColor.color,
+                  textShadow: `0 0 10px ${teamColor.glow}`,
+                }}
+              />
+              {bowlingScoreError ? (
+                <p className="text-xs mt-1 text-red-400 leading-tight">{bowlingScoreError}</p>
+              ) : (
+                <p className="text-xs mt-1 opacity-50" style={{ color: teamColor.color }}>タップして入力</p>
+              )}
+            </div>
+
+            {/* 合計スコア */}
+            <div className="flex-1 text-center">
+              <p className="text-xs mb-1 font-bold opacity-70" style={{ color: teamColor.color }}>合計</p>
+              <p className="text-3xl md:text-4xl font-bold text-neon-yellow transition-all duration-300" style={{
+                textShadow: '0 0 20px rgba(255, 190, 11, 0.8)',
+              }}>
+                {combinedScore}
+              </p>
+              <p className="text-xs mt-1 opacity-50 text-neon-yellow">TOTAL</p>
+            </div>
+          </div>
         </div>
       </div>
 

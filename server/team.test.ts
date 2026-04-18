@@ -96,14 +96,48 @@ describe("team.getRankings", () => {
     expect(Array.isArray(result)).toBe(true);
   });
 
-  it("ランキングの各エントリに必要なフィールドが含まれる", async () => {
+  it("ランキングの各エントリにbingoScore/bowlingScore/totalCombinedScoreが含まれる", async () => {
     const caller = appRouter.createCaller(createPublicContext());
     const result = await caller.team.getRankings();
     for (const entry of result) {
       expect(entry).toHaveProperty("teamNumber");
-      expect(entry).toHaveProperty("totalScore");
+      expect(entry).toHaveProperty("bingoScore");
+      expect(entry).toHaveProperty("bowlingScore");
+      expect(entry).toHaveProperty("totalCombinedScore");
       expect(entry).toHaveProperty("completedLines");
+      // totalCombinedScore = bingoScore + bowlingScore
+      expect(entry.totalCombinedScore).toBe(entry.bingoScore + entry.bowlingScore);
     }
+  });
+});
+
+describe("team.updateBowlingScore", () => {
+  it("存在しないチームへの更新はNOT_FOUNDエラーになる", async () => {
+    const caller = appRouter.createCaller(createPublicContext());
+    // チーム10をリセットしてから存在しない状態でテスト
+    await caller.admin.resetTeam({ teamNumber: 10, password: VALID_PASSWORD });
+    await expect(
+      caller.team.updateBowlingScore({ teamNumber: 10, bowlingScore: 150 })
+    ).rejects.toThrow();
+  });
+
+  it("チームが存在する場合はボウリングスコアを更新できる", async () => {
+    const caller = appRouter.createCaller(createPublicContext());
+    // まずビンゴ状態を作成
+    await caller.team.updateBingoState({
+      teamNumber: 5,
+      gridData: "[]",
+      markedCells: "[]",
+      completedLines: "[]",
+      totalScore: 0,
+      bowlingScore: 0,
+    });
+    // ボウリングスコアを更新
+    const result = await caller.team.updateBowlingScore({ teamNumber: 5, bowlingScore: 200 });
+    expect(result).toEqual({ success: true });
+    // 更新後に確認
+    const state = await caller.team.getBingoState({ teamNumber: 5 });
+    expect(state?.bowlingScore).toBe(200);
   });
 });
 

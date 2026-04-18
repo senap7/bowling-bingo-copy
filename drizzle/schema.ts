@@ -33,6 +33,7 @@ export const teamBingoStates = mysqlTable("teamBingoStates", {
   markedCells: text("markedCells").notNull(), // JSON形式のマーク状態
   completedLines: text("completedLines").notNull(), // JSON形式の完成ラインリスト
   totalScore: int("totalScore").default(0).notNull(),
+  bowlingScore: int("bowlingScore").default(0).notNull(), // チームの実ボウリング合計スコア（手入力）
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

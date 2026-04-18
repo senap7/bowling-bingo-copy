@@ -63,7 +63,7 @@ export const appRouter = router({
         return state;
       }),
 
-    // チームビンゴ状態を更新（markedCells・completedLines・totalScoreのみ）
+    // チームビンゴ状態を更新（markedCells・completedLines・totalScore・bowlingScore）
     updateBingoState: publicProcedure
       .input(z.object({
         teamNumber: z.number().min(1).max(10),
@@ -71,6 +71,7 @@ export const appRouter = router({
         markedCells: z.string(),
         completedLines: z.string(),
         totalScore: z.number(),
+        bowlingScore: z.number().optional(),
       }))
       .mutation(async ({ input }) => {
         await upsertTeamBingoState(input.teamNumber, {
@@ -78,6 +79,28 @@ export const appRouter = router({
           markedCells: input.markedCells,
           completedLines: input.completedLines,
           totalScore: input.totalScore,
+          ...(input.bowlingScore !== undefined ? { bowlingScore: input.bowlingScore } : {}),
+        });
+        return { success: true };
+      }),
+
+    // ボウリング実スコアのみ更新
+    updateBowlingScore: publicProcedure
+      .input(z.object({
+        teamNumber: z.number().min(1).max(10),
+        bowlingScore: z.number().min(0),
+      }))
+      .mutation(async ({ input }) => {
+        const existing = await getTeamBingoState(input.teamNumber);
+        if (!existing) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'チームが見つかりません' });
+        }
+        await upsertTeamBingoState(input.teamNumber, {
+          gridData: existing.gridData,
+          markedCells: existing.markedCells,
+          completedLines: existing.completedLines,
+          totalScore: existing.totalScore,
+          bowlingScore: input.bowlingScore,
         });
         return { success: true };
       }),
@@ -88,7 +111,9 @@ export const appRouter = router({
         const rankings = await getAllTeamRankings();
         return rankings.map(r => ({
           teamNumber: r.teamNumber,
-          totalScore: r.totalScore,
+          bingoScore: r.totalScore,
+          bowlingScore: r.bowlingScore ?? 0,
+          totalCombinedScore: r.totalScore + (r.bowlingScore ?? 0),
           completedLines: (() => {
             try {
               const lines = JSON.parse(r.completedLines);

@@ -127,6 +127,7 @@ export async function upsertTeamBingoState(teamNumber: number, state: Omit<Inser
         markedCells: state.markedCells,
         completedLines: state.completedLines,
         totalScore: state.totalScore,
+        ...(state.bowlingScore !== undefined ? { bowlingScore: state.bowlingScore } : {}),
         updatedAt: new Date(),
       },
     });

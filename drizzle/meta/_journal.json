@@ -29,6 +29,13 @@
       "when": 1776493420689,
       "tag": "0003_abandoned_mojo",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1776494987738,
+      "tag": "0004_funny_frightful_four",
+      "breakpoints": true
     }
   ]
 }

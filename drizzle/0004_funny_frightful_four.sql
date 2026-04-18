@@ -1,0 +1,1 @@
+ALTER TABLE `teamBingoStates` ADD `bowlingScore` int DEFAULT 0 NOT NULL;
