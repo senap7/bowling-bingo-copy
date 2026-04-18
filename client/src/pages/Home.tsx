@@ -1,8 +1,9 @@
 import { useTeamBingoBowling } from '@/hooks/useTeamBingoBowling';
 import { Button } from '@/components/ui/button';
-import { RotateCcw, Zap, Trophy, Shield } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { RotateCcw, Zap, Trophy, Shield, Pencil } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { trpc } from '@/lib/trpc';
 import { Link } from 'wouter';
 import { getTeamColor, TEAM_COLORS } from '@shared/teamColors';
@@ -116,6 +117,52 @@ function RankingTable() {
 }
 
 /**
+ * リーチ判定：あと1マスでビンゴになるセルの座標セットを返す
+ * 各ライン（行・列・斜め）で marked が4つ、未marked が1つの場合にそのセルをリーチとみなす
+ */
+function getReachCells(grid: { marked: boolean }[][]): Set<string> {
+  const reachSet = new Set<string>();
+
+  // 行チェック
+  for (let row = 0; row < 5; row++) {
+    const markedCount = grid[row].filter(c => c.marked).length;
+    if (markedCount === 4) {
+      for (let col = 0; col < 5; col++) {
+        if (!grid[row][col].marked) reachSet.add(`${row}-${col}`);
+      }
+    }
+  }
+
+  // 列チェック
+  for (let col = 0; col < 5; col++) {
+    const markedCount = grid.filter(r => r[col].marked).length;
+    if (markedCount === 4) {
+      for (let row = 0; row < 5; row++) {
+        if (!grid[row][col].marked) reachSet.add(`${row}-${col}`);
+      }
+    }
+  }
+
+  // 左上→右下 斜めチェック
+  const diagLRMarked = grid.filter((r, i) => r[i].marked).length;
+  if (diagLRMarked === 4) {
+    for (let i = 0; i < 5; i++) {
+      if (!grid[i][i].marked) reachSet.add(`${i}-${i}`);
+    }
+  }
+
+  // 右上→左下 斜めチェック
+  const diagRLMarked = grid.filter((r, i) => r[4 - i].marked).length;
+  if (diagRLMarked === 4) {
+    for (let i = 0; i < 5; i++) {
+      if (!grid[i][4 - i].marked) reachSet.add(`${i}-${4 - i}`);
+    }
+  }
+
+  return reachSet;
+}
+
+/**
  * ボウリングビンゴ - メインゲームページ
  */
 export default function Home() {
@@ -123,8 +170,13 @@ export default function Home() {
   const [animatingCells, setAnimatingCells] = useState<Set<string>>(new Set());
   const [showBingoEffect, setShowBingoEffect] = useState(false);
   const [particles, setParticles] = useState<Array<{ id: string; x: number; y: number }>>([]);
+
+  // ボウリングスコアポップアップ
+  const [bowlingDialogOpen, setBowlingDialogOpen] = useState(false);
   const [bowlingScoreInput, setBowlingScoreInput] = useState<string>('');
-  const [isBowlingInputFocused, setIsBowlingInputFocused] = useState(false);
+  const [bowlingScoreError, setBowlingScoreError] = useState<string | null>(null);
+  const dialogInputRef = useRef<HTMLInputElement>(null);
+
   const utils = trpc.useUtils();
 
   const { grid, totalScore, completedLines, toggleCell, resetGame, isLineCompleted, isLoading } = useTeamBingoBowling(selectedTeam);
@@ -138,22 +190,22 @@ export default function Home() {
     { refetchInterval: 2000 }
   );
 
-  // bowlingScoreをサーバーから読み込む（フォーカス中は上書きしない）
+  // bowlingScoreをサーバーから読み込む（ダイアログが開いていない時のみ）
   useEffect(() => {
-    if (isBowlingInputFocused) return; // 入力中はポーリングで上書きしない
+    if (bowlingDialogOpen) return; // ダイアログ入力中は上書きしない
     if (teamState && teamState.bowlingScore !== undefined) {
       setBowlingScoreInput(teamState.bowlingScore > 0 ? teamState.bowlingScore.toString() : '');
     }
-  }, [teamState?.bowlingScore, selectedTeam, isBowlingInputFocused]);
+  }, [teamState?.bowlingScore, selectedTeam, bowlingDialogOpen]);
 
   // ボウリング実スコア更新ミューテーション
-  const [bowlingScoreError, setBowlingScoreError] = useState<string | null>(null);
   const updateBowlingScoreMutation = trpc.team.updateBowlingScore.useMutation({
     onSuccess: () => {
-      // ボウリングスコア保存成功時にランキングを即座に再取得
+      // 保存成功時にランキングを即座に再取得
       utils.team.getRankings.invalidate();
       utils.team.getBingoState.invalidate();
       setBowlingScoreError(null);
+      setBowlingDialogOpen(false);
     },
     onError: (err) => {
       if (err.data?.code === 'NOT_FOUND') {
@@ -170,17 +222,28 @@ export default function Home() {
     setSelectedTeam(parseInt(value));
     setBowlingScoreInput('');
     setBowlingScoreError(null);
+    setBowlingDialogOpen(false);
   };
 
-  // ボウリングスコア確定（Enterキーまたはフォーカスアウト）
+  // ダイアログを開く
+  const handleOpenBowlingDialog = () => {
+    setBowlingScoreError(null);
+    setBowlingDialogOpen(true);
+    // ダイアログが開いた後にinputにフォーカス
+    setTimeout(() => dialogInputRef.current?.focus(), 100);
+  };
+
+  // ボウリングスコア確定（入力完了ボタン）
   const handleBowlingScoreCommit = () => {
     const score = parseInt(bowlingScoreInput) || 0;
-    if (score >= 0) {
-      updateBowlingScoreMutation.mutate({
-        teamNumber: selectedTeam,
-        bowlingScore: score,
-      });
+    if (score < 0) {
+      setBowlingScoreError('0以上の数値を入力してください');
+      return;
     }
+    updateBowlingScoreMutation.mutate({
+      teamNumber: selectedTeam,
+      bowlingScore: score,
+    });
   };
 
   // ビンゴ達成時のエフェクト
@@ -217,8 +280,11 @@ export default function Home() {
   };
 
   // 合計スコア（ビンゴ + ボウリング）
-  const bowlingScore = parseInt(bowlingScoreInput) || (teamState?.bowlingScore ?? 0);
-  const combinedScore = totalScore + bowlingScore;
+  const bowlingScoreDisplay = teamState?.bowlingScore ?? 0;
+  const combinedScore = totalScore + bowlingScoreDisplay;
+
+  // リーチセル計算（あと1マスでビンゴになるセル）
+  const reachCells = getReachCells(grid);
 
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col items-center justify-center p-4 relative overflow-hidden">
@@ -293,13 +359,12 @@ export default function Home() {
         </div>
       </div>
 
-      {/* スコア表示（2種類） */}
+      {/* スコア表示（3カラム） */}
       <div className="mb-6 z-10 w-full max-w-sm">
         <div className="bg-card border-2 rounded-lg p-4 md:p-5 backdrop-blur-sm transition-all duration-500" style={{
           borderColor: teamColor.color,
           boxShadow: `0 0 20px ${teamColor.glow}, inset 0 0 20px ${teamColor.glow.replace('0.7', '0.1')}`,
         }}>
-          {/* 2カラムレイアウト：ビンゴスコア ＋ 合計スコア */}
           <div className="flex gap-4 items-stretch">
             {/* ビンゴスコア */}
             <div className="flex-1 text-center border-r border-opacity-30" style={{ borderColor: teamColor.color }}>
@@ -320,30 +385,23 @@ export default function Home() {
               )}
             </div>
 
-            {/* ボウリング実スコア入力 */}
+            {/* ボウリング実スコア（タップでポップアップ） */}
             <div className="flex-1 text-center border-r border-opacity-30" style={{ borderColor: teamColor.color }}>
               <p className="text-xs mb-1 font-bold opacity-70" style={{ color: teamColor.color }}>ボウリング</p>
-              <input
-                type="number"
-                min="0"
-                value={bowlingScoreInput}
-                onChange={(e) => setBowlingScoreInput(e.target.value)}
-                onFocus={() => setIsBowlingInputFocused(true)}
-                onBlur={() => { setIsBowlingInputFocused(false); handleBowlingScoreCommit(); }}
-                onKeyDown={(e) => e.key === 'Enter' && handleBowlingScoreCommit()}
-                placeholder="0"
-                className="w-full text-center text-3xl md:text-4xl font-bold bg-transparent border-b-2 outline-none transition-colors duration-300 font-mono"
-                style={{
+              <button
+                onClick={handleOpenBowlingDialog}
+                className="w-full flex items-center justify-center gap-1 group"
+                title="タップしてスコアを入力"
+              >
+                <span className="text-3xl md:text-4xl font-bold font-mono transition-all duration-300 group-hover:scale-105" style={{
                   color: teamColor.color,
-                  borderColor: teamColor.color,
                   textShadow: `0 0 10px ${teamColor.glow}`,
-                }}
-              />
-              {bowlingScoreError ? (
-                <p className="text-xs mt-1 text-red-400 leading-tight">{bowlingScoreError}</p>
-              ) : (
-                <p className="text-xs mt-1 opacity-50" style={{ color: teamColor.color }}>タップして入力</p>
-              )}
+                }}>
+                  {bowlingScoreDisplay > 0 ? bowlingScoreDisplay : '—'}
+                </span>
+                <Pencil size={12} className="opacity-50 group-hover:opacity-100 transition-opacity" style={{ color: teamColor.color }} />
+              </button>
+              <p className="text-xs mt-1 opacity-50" style={{ color: teamColor.color }}>タップして入力</p>
             </div>
 
             {/* 合計スコア */}
@@ -375,6 +433,7 @@ export default function Home() {
               row.map((cell, colIndex) => {
                 const isCompleted = isLineCompleted(rowIndex, colIndex);
                 const isAnimating = animatingCells.has(cell.id);
+                const isReach = !cell.marked && reachCells.has(`${rowIndex}-${colIndex}`);
 
                 return (
                   <button
@@ -387,6 +446,7 @@ export default function Home() {
                       flex items-center justify-center
                       border-2
                       ${isAnimating ? 'scale-110' : 'scale-100'}
+                      ${isReach ? 'animate-pulse' : ''}
                     `}
                     style={cell.marked ? {
                       backgroundColor: teamColor.markedBg,
@@ -394,6 +454,12 @@ export default function Home() {
                       borderColor: teamColor.color,
                       boxShadow: `0 0 15px ${teamColor.glow}, inset 0 0 10px ${teamColor.glow.replace('0.7', '0.3')}`,
                       outline: isCompleted ? `2px solid #ffbe0b` : undefined,
+                    } : isReach ? {
+                      // リーチセル：黄色の強調枠＋点滅
+                      backgroundColor: 'rgba(255, 190, 11, 0.15)',
+                      color: '#ffbe0b',
+                      borderColor: '#ffbe0b',
+                      boxShadow: '0 0 20px rgba(255, 190, 11, 0.8), inset 0 0 10px rgba(255, 190, 11, 0.2)',
                     } : {
                       backgroundColor: 'var(--dark-card, #0d1b2a)',
                       color: teamColor.color,
@@ -402,11 +468,28 @@ export default function Home() {
                     }}
                   >
                     <span>{cell.score}</span>
+                    {isReach && (
+                      <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-neon-yellow animate-ping" />
+                    )}
                   </button>
                 );
               })
             )}
           </div>
+          {/* リーチ表示バナー */}
+          {reachCells.size > 0 && completedLines.length === 0 && (
+            <div className="mt-3 text-center">
+              <span className="inline-block px-4 py-1 rounded-full text-xs font-bold animate-pulse"
+                style={{
+                  backgroundColor: 'rgba(255, 190, 11, 0.2)',
+                  color: '#ffbe0b',
+                  border: '1px solid rgba(255, 190, 11, 0.6)',
+                  textShadow: '0 0 10px rgba(255, 190, 11, 0.8)',
+                }}>
+                ⚡ REACH！あと1マスでビンゴ！
+              </span>
+            </div>
+          )}
         </div>
       )}
 
@@ -450,6 +533,80 @@ export default function Home() {
         <div className="absolute bottom-20 left-10 w-40 h-40 bg-neon-cyan rounded-full blur-3xl" />
         <div className="absolute top-1/2 right-1/4 w-32 h-32 rounded-full blur-3xl transition-all duration-500" style={{ backgroundColor: teamColor.color }} />
       </div>
+
+      {/* ボウリングスコア入力ダイアログ */}
+      <Dialog open={bowlingDialogOpen} onOpenChange={(open) => {
+        if (!open) {
+          setBowlingScoreError(null);
+        }
+        setBowlingDialogOpen(open);
+      }}>
+        <DialogContent className="bg-card border-2 max-w-xs mx-auto" style={{
+          borderColor: teamColor.color,
+          boxShadow: `0 0 40px ${teamColor.glow}`,
+        }}>
+          <DialogHeader>
+            <DialogTitle className="text-center font-bold" style={{
+              color: teamColor.color,
+              textShadow: `0 0 10px ${teamColor.glow}`,
+            }}>
+              <span className="inline-block w-2 h-2 rounded-full mr-2" style={{ backgroundColor: teamColor.color }} />
+              チーム{selectedTeam} ボウリングスコア
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="py-4">
+            <input
+              ref={dialogInputRef}
+              type="number"
+              min="0"
+              value={bowlingScoreInput}
+              onChange={(e) => {
+                setBowlingScoreInput(e.target.value);
+                setBowlingScoreError(null);
+              }}
+              onKeyDown={(e) => e.key === 'Enter' && handleBowlingScoreCommit()}
+              placeholder="0"
+              className="w-full text-center text-5xl font-bold bg-transparent border-b-2 outline-none transition-colors duration-300 font-mono pb-2"
+              style={{
+                color: teamColor.color,
+                borderColor: teamColor.color,
+                textShadow: `0 0 15px ${teamColor.glow}`,
+              }}
+            />
+            {bowlingScoreError && (
+              <p className="text-xs mt-3 text-red-400 text-center">{bowlingScoreError}</p>
+            )}
+            <p className="text-xs mt-2 text-center opacity-50" style={{ color: teamColor.color }}>
+              チームの合計ボウリングスコアを入力してください
+            </p>
+          </div>
+
+          <DialogFooter className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setBowlingDialogOpen(false)}
+              className="flex-1"
+              style={{ borderColor: teamColor.color, color: teamColor.color }}
+            >
+              キャンセル
+            </Button>
+            <Button
+              onClick={handleBowlingScoreCommit}
+              disabled={updateBowlingScoreMutation.isPending}
+              className="flex-1 font-bold"
+              style={{
+                backgroundColor: teamColor.markedBg,
+                color: teamColor.markedText,
+                borderColor: teamColor.color,
+                boxShadow: `0 0 15px ${teamColor.glow}`,
+              }}
+            >
+              {updateBowlingScoreMutation.isPending ? '保存中...' : '入力完了'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
