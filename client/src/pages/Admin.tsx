@@ -168,7 +168,7 @@ export default function Admin() {
           {!confirmReset ? (
             <Button
               onClick={() => setConfirmReset(true)}
-              className="w-full bg-transparent border-2 border-neon-pink text-neon-pink hover:bg-neon-pink hover:text-background font-bold transition-all"
+              className="w-full bg-neon-pink text-background border-2 border-neon-pink hover:bg-red-500 font-bold transition-all"
             >
               全チームのデータをリセット
             </Button>
@@ -209,7 +209,7 @@ export default function Admin() {
           <Button
             onClick={() => resetSharedLayoutMutation.mutate({ password })}
             disabled={resetSharedLayoutMutation.isPending}
-            className="w-full bg-transparent border-2 border-neon-yellow text-neon-yellow hover:bg-neon-yellow hover:text-background font-bold transition-all"
+            className="w-full bg-neon-yellow text-background border-2 border-neon-yellow hover:opacity-80 font-bold transition-all"
           >
             {resetSharedLayoutMutation.isPending ? '処理中...' : '共通カードをリセット'}
           </Button>
