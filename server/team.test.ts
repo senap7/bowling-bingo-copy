@@ -157,3 +157,39 @@ describe("admin.getAllTeamStates", () => {
     ).rejects.toThrow("パスワードが正しくありません");
   });
 });
+
+describe("admin.getSharedLayout", () => {
+  it("正しいパスワードで共通カード配置を取得できる", async () => {
+    const caller = appRouter.createCaller(createPublicContext());
+    const result = await caller.admin.getSharedLayout({ password: VALID_PASSWORD });
+    // nullまたはJSON文字列のどちらか
+    expect(result === null || typeof result === "string").toBe(true);
+  });
+
+  it("間違ったパスワードでエラー", async () => {
+    const caller = appRouter.createCaller(createPublicContext());
+    await expect(
+      caller.admin.getSharedLayout({ password: INVALID_PASSWORD })
+    ).rejects.toThrow("パスワードが正しくありません");
+  });
+});
+
+describe("admin.updateSharedLayout", () => {
+  it("正しいパスワードで共通カード配置を更新できる", async () => {
+    const caller = appRouter.createCaller(createPublicContext());
+    const testGrid = JSON.stringify([[{ id: "0-0", score: "1|2", marked: false }]]);
+    const result = await caller.admin.updateSharedLayout({ password: VALID_PASSWORD, gridData: testGrid });
+    expect(result).toEqual({ success: true });
+
+    // 更新後に取得して確認
+    const layout = await caller.admin.getSharedLayout({ password: VALID_PASSWORD });
+    expect(layout).toBe(testGrid);
+  });
+
+  it("間違ったパスワードでエラー", async () => {
+    const caller = appRouter.createCaller(createPublicContext());
+    await expect(
+      caller.admin.updateSharedLayout({ password: INVALID_PASSWORD, gridData: "[]" })
+    ).rejects.toThrow("パスワードが正しくありません");
+  });
+});

@@ -195,6 +195,29 @@ export const appRouter = router({
         await resetSharedBingoLayout();
         return { success: true };
       }),
+
+    // 共通カード配置を取得（パスワード認証付き、プレビュー用）
+    getSharedLayout: publicProcedure
+      .input(z.object({ password: z.string() }))
+      .query(async ({ input }) => {
+        if (input.password !== ADMIN_PASSWORD) {
+          throw new TRPCError({ code: 'UNAUTHORIZED', message: 'パスワードが正しくありません' });
+        }
+        const layout = await getSharedBingoLayout();
+        if (!layout) return null;
+        return layout.gridData;
+      }),
+
+    // 共通カード配置を更新（マス内容編集用）
+    updateSharedLayout: publicProcedure
+      .input(z.object({ password: z.string(), gridData: z.string() }))
+      .mutation(async ({ input }) => {
+        if (input.password !== ADMIN_PASSWORD) {
+          throw new TRPCError({ code: 'UNAUTHORIZED', message: 'パスワードが正しくありません' });
+        }
+        await upsertSharedBingoLayout(input.gridData);
+        return { success: true };
+      }),
   }),
 });
 

@@ -1,18 +1,76 @@
 import { Button } from '@/components/ui/button';
 import { trpc } from '@/lib/trpc';
-import { ArrowLeft, RefreshCw, Trash2, Trophy, Shield, Lock } from 'lucide-react';
+import { ArrowLeft, RefreshCw, Trash2, Trophy, Shield, Lock, Eye, Pencil, Save, X } from 'lucide-react';
 import { Link } from 'wouter';
 import { toast } from 'sonner';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { getTeamColor } from '@shared/teamColors';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+
+interface BingoCell {
+  id: string;
+  score: string;
+  marked: boolean;
+}
+
+/**
+ * カードプレビューコンポーネント（5x5グリッド表示）
+ */
+function CardPreview({ gridData, onEditCell }: { gridData: string; onEditCell?: (row: number, col: number, currentValue: string) => void }) {
+  let grid: BingoCell[][] = [];
+  try {
+    grid = JSON.parse(gridData);
+  } catch {
+    return <p className="text-neon-pink text-xs text-center">カードデータの解析に失敗しました</p>;
+  }
+
+  return (
+    <div className="grid grid-cols-5 gap-1.5 p-3">
+      {grid.map((row, rowIndex) =>
+        row.map((cell, colIndex) => {
+          const isCenter = rowIndex === 2 && colIndex === 2;
+          const isInnerRing = !isCenter && rowIndex >= 1 && rowIndex <= 3 && colIndex >= 1 && colIndex <= 3;
+          const isSpare = cell.score.includes('◢');
+
+          return (
+            <button
+              key={cell.id}
+              onClick={() => onEditCell?.(rowIndex, colIndex, cell.score)}
+              disabled={isCenter || !onEditCell}
+              className={`
+                w-12 h-12 md:w-14 md:h-14
+                rounded-md font-mono font-bold text-xs
+                flex items-center justify-center
+                border-2 transition-all duration-200
+                ${onEditCell && !isCenter ? 'hover:scale-105 cursor-pointer' : 'cursor-default'}
+              `}
+              style={isCenter ? {
+                backgroundColor: 'rgba(255, 190, 11, 0.3)',
+                color: '#ffbe0b',
+                borderColor: '#ffbe0b',
+                boxShadow: '0 0 10px rgba(255, 190, 11, 0.5)',
+              } : isInnerRing || isSpare ? {
+                backgroundColor: 'rgba(255, 190, 11, 0.15)',
+                color: '#ffbe0b',
+                borderColor: 'rgba(255, 190, 11, 0.5)',
+              } : {
+                backgroundColor: 'rgba(0, 245, 255, 0.1)',
+                color: '#00f5ff',
+                borderColor: 'rgba(0, 245, 255, 0.3)',
+              }}
+              title={onEditCell && !isCenter ? 'クリックして編集' : undefined}
+            >
+              {cell.score}
+            </button>
+          );
+        })
+      )}
+    </div>
+  );
+}
 
 /**
  * 管理者画面（パスワード認証）
- * - パスワード: bowlinglover
- * - 全チームの状態確認
- * - 全チームリセット（共通カードも含む）
- * - 個別チームリセット
- * - 共通カード配置リセット
  */
 export default function Admin() {
   const utils = trpc.useUtils();
@@ -20,6 +78,13 @@ export default function Admin() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authError, setAuthError] = useState('');
   const [confirmReset, setConfirmReset] = useState(false);
+
+  // カード編集ダイアログ
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editRow, setEditRow] = useState(0);
+  const [editCol, setEditCol] = useState(0);
+  const [editValue, setEditValue] = useState('');
+  const [editOriginal, setEditOriginal] = useState('');
 
   const verifyMutation = trpc.admin.verifyPassword.useMutation({
     onSuccess: () => {
@@ -39,12 +104,19 @@ export default function Admin() {
     }
   );
 
+  // 共通カード配置を取得（プレビュー用）
+  const { data: sharedLayout, refetch: refetchLayout } = trpc.admin.getSharedLayout.useQuery(
+    { password },
+    { enabled: isAuthenticated }
+  );
+
   const resetAllMutation = trpc.admin.resetAllTeams.useMutation({
     onSuccess: () => {
       toast.success('全チームのデータをリセットしました（共通カードも含む）');
       utils.admin.getAllTeamStates.invalidate();
       utils.team.getRankings.invalidate();
       utils.team.getSharedLayout.invalidate();
+      utils.admin.getSharedLayout.invalidate();
       setConfirmReset(false);
     },
     onError: (err) => {
@@ -65,13 +137,49 @@ export default function Admin() {
 
   const resetSharedLayoutMutation = trpc.admin.resetSharedLayout.useMutation({
     onSuccess: () => {
-      toast.success('共通カード配置をリセットしました。次回アクセス時に新しいカードが生成されます。');
+      toast.success('共通カード配置をリセットしました。新しいカードが生成されます。');
       utils.team.getSharedLayout.invalidate();
+      utils.admin.getSharedLayout.invalidate();
     },
     onError: (err) => {
       toast.error(`エラー: ${err.message}`);
     },
   });
+
+  const updateSharedLayoutMutation = trpc.admin.updateSharedLayout.useMutation({
+    onSuccess: () => {
+      toast.success('カードのマス内容を更新しました');
+      utils.team.getSharedLayout.invalidate();
+      utils.admin.getSharedLayout.invalidate();
+      setEditDialogOpen(false);
+    },
+    onError: (err) => {
+      toast.error(`エラー: ${err.message}`);
+    },
+  });
+
+  // マス編集ダイアログを開く
+  const handleEditCell = (row: number, col: number, currentValue: string) => {
+    setEditRow(row);
+    setEditCol(col);
+    setEditValue(currentValue);
+    setEditOriginal(currentValue);
+    setEditDialogOpen(true);
+  };
+
+  // マス内容を保存
+  const handleSaveCell = () => {
+    if (!sharedLayout || !editValue.trim()) return;
+
+    try {
+      const grid: BingoCell[][] = JSON.parse(sharedLayout);
+      grid[editRow][editCol].score = editValue.trim();
+      const newGridData = JSON.stringify(grid);
+      updateSharedLayoutMutation.mutate({ password, gridData: newGridData });
+    } catch {
+      toast.error('カードデータの更新に失敗しました');
+    }
+  };
 
   // パスワード認証画面
   if (!isAuthenticated) {
@@ -196,24 +304,59 @@ export default function Admin() {
           )}
         </div>
 
-        {/* 共通カードのみリセット */}
+        {/* 共通カード管理セクション */}
         <div className="bg-card border-2 border-neon-yellow rounded-lg p-4 mb-4" style={{
           boxShadow: '0 0 15px rgba(255, 190, 11, 0.3)'
         }}>
           <h2 className="text-neon-yellow font-bold text-sm mb-3 flex items-center gap-2">
             <RefreshCw size={16} />
-            共通カード配置のリセット
+            共通カード管理
           </h2>
           <p className="text-neon-cyan text-xs mb-3 opacity-70">
-            全チームで共有するビンゴカードの配置を新しくします。次回アクセス時に新しいカードが生成されます。
+            全チームで共有するビンゴカードの配置を管理します。リセットすると新しいカードが生成されます。
           </p>
-          <Button
-            onClick={() => resetSharedLayoutMutation.mutate({ password })}
-            disabled={resetSharedLayoutMutation.isPending}
-            className="w-full bg-neon-yellow text-background border-2 border-neon-yellow hover:opacity-80 font-bold transition-all"
-          >
-            {resetSharedLayoutMutation.isPending ? '処理中...' : '共通カードをリセット'}
-          </Button>
+          <div className="flex gap-2 mb-4">
+            <Button
+              onClick={() => resetSharedLayoutMutation.mutate({ password })}
+              disabled={resetSharedLayoutMutation.isPending}
+              className="flex-1 bg-neon-yellow text-background border-2 border-neon-yellow hover:opacity-80 font-bold transition-all"
+            >
+              {resetSharedLayoutMutation.isPending ? '処理中...' : '新しいカードを生成'}
+            </Button>
+            <Button
+              onClick={() => refetchLayout()}
+              variant="outline"
+              className="border-neon-yellow text-neon-yellow hover:bg-neon-yellow hover:text-background"
+            >
+              <RefreshCw size={14} />
+            </Button>
+          </div>
+
+          {/* カードプレビュー */}
+          {sharedLayout ? (
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <Eye size={14} className="text-neon-cyan" />
+                <h3 className="text-neon-cyan font-bold text-xs">カードプレビュー</h3>
+                <span className="text-neon-cyan text-xs opacity-50 ml-auto">
+                  <Pencil size={10} className="inline mr-1" />
+                  マスをタップして編集
+                </span>
+              </div>
+              <div className="bg-dark-card rounded-lg border border-neon-cyan border-opacity-30 flex justify-center">
+                <CardPreview gridData={sharedLayout} onEditCell={handleEditCell} />
+              </div>
+              <p className="text-neon-cyan text-xs opacity-40 mt-2 text-center">
+                黄色 = スペアマス（内側2列目） / 水色 = 通常マス / 中央 = ストライク
+              </p>
+            </div>
+          ) : (
+            <div className="bg-dark-card rounded-lg border border-neon-cyan border-opacity-30 p-6 text-center">
+              <p className="text-neon-cyan text-xs opacity-60">
+                カードが未生成です。「新しいカードを生成」ボタンを押すか、ホーム画面でチームがアクセスすると自動生成されます。
+              </p>
+            </div>
+          )}
         </div>
 
         {/* チーム別状態テーブル */}
@@ -302,6 +445,61 @@ export default function Admin() {
           )}
         </div>
       </div>
+
+      {/* マス内容編集ダイアログ */}
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent className="bg-card border-2 border-neon-yellow max-w-xs mx-auto" style={{
+          boxShadow: '0 0 40px rgba(255, 190, 11, 0.5)',
+        }}>
+          <DialogHeader>
+            <DialogTitle className="text-neon-yellow text-center font-bold" style={{
+              textShadow: '0 0 10px rgba(255, 190, 11, 0.6)',
+            }}>
+              <Pencil size={16} className="inline mr-2" />
+              マス内容を編集
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="py-4">
+            <p className="text-neon-cyan text-xs mb-2 text-center opacity-70">
+              位置: {editRow + 1}行 {editCol + 1}列 （現在: {editOriginal}）
+            </p>
+            <input
+              type="text"
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSaveCell()}
+              className="w-full text-center text-3xl font-bold bg-transparent border-b-2 border-neon-yellow outline-none text-neon-yellow font-mono pb-2"
+              style={{
+                textShadow: '0 0 10px rgba(255, 190, 11, 0.6)',
+              }}
+              autoFocus
+            />
+            <p className="text-neon-cyan text-xs mt-3 opacity-50 text-center">
+              例: 3|5（通常）、5◢（スペア）、▶︎◀︎（ストライク）
+            </p>
+          </div>
+
+          <DialogFooter className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setEditDialogOpen(false)}
+              className="flex-1 border-neon-cyan text-neon-cyan"
+            >
+              <X size={14} className="mr-1" />
+              キャンセル
+            </Button>
+            <Button
+              onClick={handleSaveCell}
+              disabled={updateSharedLayoutMutation.isPending || !editValue.trim()}
+              className="flex-1 bg-neon-yellow text-background font-bold hover:opacity-80"
+            >
+              <Save size={14} className="mr-1" />
+              {updateSharedLayoutMutation.isPending ? '保存中...' : '保存'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
