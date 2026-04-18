@@ -148,6 +148,7 @@ export default function Home() {
   const [bowlingScoreError, setBowlingScoreError] = useState<string | null>(null);
   const updateBowlingScoreMutation = trpc.team.updateBowlingScore.useMutation({
     onSuccess: () => {
+      // ボウリングスコア保存成功時にランキングを即座に再取得
       utils.team.getRankings.invalidate();
       utils.team.getBingoState.invalidate();
       setBowlingScoreError(null);

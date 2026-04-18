@@ -163,7 +163,7 @@ const applyMarkedCells = (grid: BingoCell[][], markedStr: string): BingoCell[][]
   }
 };
 
-export const useTeamBingoBowling = (teamNumber: number) => {
+export const useTeamBingoBowling = (teamNumber: number, onRankingRefresh?: () => void) => {
   const [grid, setGrid] = useState<BingoCell[][]>(() => generateBingoGrid());
   const [completedLines, setCompletedLines] = useState<string[]>([]);
   const [isInitialized, setIsInitialized] = useState(false);
@@ -189,7 +189,13 @@ export const useTeamBingoBowling = (teamNumber: number) => {
   );
 
   // サーバーへの更新ミューテーション
-  const updateMutation = trpc.team.updateBingoState.useMutation();
+  const updateMutation = trpc.team.updateBingoState.useMutation({
+    onSuccess: () => {
+      // ビンゴマス変更成功時にランキングを即座に再取得
+      utils.team.getRankings.invalidate();
+      onRankingRefresh?.();
+    },
+  });
 
   // チーム番号が変更されたときはリセット
   useEffect(() => {
