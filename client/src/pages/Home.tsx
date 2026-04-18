@@ -1,19 +1,118 @@
 import { useTeamBingoBowling } from '@/hooks/useTeamBingoBowling';
 import { Button } from '@/components/ui/button';
-import { RotateCcw, Zap } from 'lucide-react';
+import { RotateCcw, Zap, Trophy, Shield } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/_core/hooks/useAuth';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { trpc } from '@/lib/trpc';
+import { Link } from 'wouter';
+
+/**
+ * ランキングテーブルコンポーネント
+ */
+function RankingTable() {
+  const { data: rankings, isLoading } = trpc.team.getRankings.useQuery(undefined, {
+    refetchInterval: 3000,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="z-10 w-full max-w-sm mb-6">
+        <div className="bg-card border-2 border-neon-yellow rounded-lg p-4 text-center text-neon-cyan text-sm">
+          ランキング読み込み中...
+        </div>
+      </div>
+    );
+  }
+
+  if (!rankings || rankings.length === 0) {
+    return (
+      <div className="z-10 w-full max-w-sm mb-6">
+        <div className="bg-card border-2 border-neon-yellow rounded-lg p-4" style={{
+          boxShadow: '0 0 15px rgba(255, 190, 11, 0.3)'
+        }}>
+          <div className="flex items-center gap-2 mb-3">
+            <Trophy size={18} className="text-neon-yellow" />
+            <h2 className="text-neon-yellow font-bold text-sm" style={{
+              textShadow: '0 0 10px rgba(255, 190, 11, 0.6)'
+            }}>RANKING</h2>
+          </div>
+          <p className="text-neon-cyan text-xs text-center">まだデータがありません</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="z-10 w-full max-w-sm mb-6">
+      <div className="bg-card border-2 border-neon-yellow rounded-lg p-4" style={{
+        boxShadow: '0 0 15px rgba(255, 190, 11, 0.3)'
+      }}>
+        <div className="flex items-center gap-2 mb-3">
+          <Trophy size={18} className="text-neon-yellow" />
+          <h2 className="text-neon-yellow font-bold text-sm" style={{
+            textShadow: '0 0 10px rgba(255, 190, 11, 0.6)'
+          }}>RANKING</h2>
+        </div>
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="border-b border-neon-cyan border-opacity-30">
+              <th className="text-neon-cyan text-left pb-2 w-8">#</th>
+              <th className="text-neon-cyan text-left pb-2">チーム</th>
+              <th className="text-neon-cyan text-center pb-2">ビンゴ</th>
+              <th className="text-neon-cyan text-right pb-2">スコア</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rankings.map((team, index) => (
+              <tr key={team.teamNumber} className="border-b border-neon-cyan border-opacity-10">
+                <td className="py-2 text-left">
+                  <span className={`font-bold ${
+                    index === 0 ? 'text-neon-yellow' :
+                    index === 1 ? 'text-gray-300' :
+                    index === 2 ? 'text-amber-600' :
+                    'text-neon-cyan opacity-60'
+                  }`}>
+                    {index + 1}
+                  </span>
+                </td>
+                <td className="py-2 text-neon-cyan font-mono">
+                  チーム {team.teamNumber}
+                </td>
+                <td className="py-2 text-center">
+                  {team.completedLines > 0 ? (
+                    <span className="text-neon-pink font-bold" style={{
+                      textShadow: '0 0 8px rgba(255, 0, 110, 0.6)'
+                    }}>
+                      {team.completedLines}
+                    </span>
+                  ) : (
+                    <span className="text-neon-cyan opacity-40">-</span>
+                  )}
+                </td>
+                <td className="py-2 text-right">
+                  <span className={`font-bold font-mono ${
+                    index === 0 ? 'text-neon-yellow' : 'text-neon-cyan'
+                  }`} style={index === 0 ? {
+                    textShadow: '0 0 10px rgba(255, 190, 11, 0.8)'
+                  } : {}}>
+                    {team.totalScore}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
 
 /**
  * ボウリングビンゴ - メインゲームページ
- * ネオンレトロスタイル: 深い紺色背景、ネオンピンク/シアン/イエローのアクセント
- * スマホ最適化: タップしやすい大きなマス、レスポンシブレイアウト
- * チーム機能: 複数チーム対応、リアルタイム同期
  */
 export default function Home() {
-  const { user, loading, error, isAuthenticated, logout } = useAuth();
+  const { user } = useAuth();
   const [selectedTeam, setSelectedTeam] = useState<number>(1);
   const [animatingCells, setAnimatingCells] = useState<Set<string>>(new Set());
   const [showBingoEffect, setShowBingoEffect] = useState(false);
@@ -32,15 +131,14 @@ export default function Home() {
   useEffect(() => {
     if (completedLines.length > 0) {
       setShowBingoEffect(true);
-      
-      // パーティクル生成
+
       const newParticles = Array.from({ length: 20 }).map((_, i) => ({
         id: `particle-${i}`,
         x: Math.random() * 100,
         y: Math.random() * 100,
       }));
       setParticles(newParticles);
-      
+
       const timer = setTimeout(() => {
         setShowBingoEffect(false);
         setParticles([]);
@@ -50,7 +148,6 @@ export default function Home() {
   }, [completedLines]);
 
   const handleCellClick = (row: number, col: number) => {
-    // アニメーション効果
     const cellId = `${row}-${col}`;
     setAnimatingCells(prev => new Set(prev).add(cellId));
     setTimeout(() => {
@@ -60,7 +157,6 @@ export default function Home() {
         return next;
       });
     }, 300);
-
     toggleCell(row, col);
   };
 
@@ -70,7 +166,6 @@ export default function Home() {
       {showBingoEffect && (
         <div className="fixed inset-0 pointer-events-none">
           <div className="absolute inset-0 animate-pulse bg-gradient-to-r from-neon-pink via-neon-cyan to-neon-yellow opacity-30" />
-          {/* パーティクルエフェクト */}
           {particles.map(particle => (
             <div
               key={particle.id}
@@ -79,7 +174,6 @@ export default function Home() {
                 left: `${particle.x}%`,
                 top: `${particle.y}%`,
                 backgroundColor: ['#ff006e', '#00f5ff', '#ffbe0b'][Math.floor(Math.random() * 3)],
-                animation: `ping 1s cubic-bezier(0, 0, 0.2, 1) 0s infinite`,
               }}
             />
           ))}
@@ -192,7 +286,7 @@ export default function Home() {
       )}
 
       {/* リセットボタン */}
-      <div className="z-10">
+      <div className="z-10 mb-8">
         <Button
           onClick={resetGame}
           className="bg-neon-purple hover:bg-neon-pink text-background font-bold py-2 px-6 rounded-lg border-2 border-neon-cyan transition-all duration-300 flex items-center gap-2"
@@ -204,6 +298,25 @@ export default function Home() {
           NEW GAME
         </Button>
       </div>
+
+      {/* ランキング表示 */}
+      <RankingTable />
+
+      {/* 管理者リンク */}
+      {user?.role === 'admin' && (
+        <div className="z-10 mt-2 mb-8">
+          <Link href="/admin">
+            <Button
+              variant="outline"
+              className="border-neon-yellow text-neon-yellow hover:bg-neon-yellow hover:text-background font-bold py-2 px-6 rounded-lg transition-all duration-300 flex items-center gap-2"
+              style={{ boxShadow: '0 0 10px rgba(255, 190, 11, 0.4)' }}
+            >
+              <Shield size={16} />
+              管理者画面
+            </Button>
+          </Link>
+        </div>
+      )}
 
       {/* 背景装飾 */}
       <div className="fixed inset-0 pointer-events-none opacity-10">

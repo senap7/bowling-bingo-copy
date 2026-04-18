@@ -135,3 +135,52 @@ export async function upsertTeamBingoState(teamNumber: number, state: Omit<Inser
     throw error;
   }
 }
+
+// 全チームのランキングを取得（スコア降順）
+export async function getAllTeamRankings(): Promise<TeamBingoState[]> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get team rankings: database not available");
+    return [];
+  }
+
+  const result = await db
+    .select()
+    .from(teamBingoStates)
+    .orderBy(teamBingoStates.totalScore);
+
+  // totalScore降順でソート
+  return result.sort((a, b) => b.totalScore - a.totalScore);
+}
+
+// 全チームのビンゴ状態を削除（管理者用リセット）
+export async function resetAllTeams(): Promise<void> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot reset teams: database not available");
+    return;
+  }
+
+  try {
+    await db.delete(teamBingoStates);
+  } catch (error) {
+    console.error("[Database] Failed to reset all teams:", error);
+    throw error;
+  }
+}
+
+// 特定チームのビンゴ状態を削除（管理者用リセット）
+export async function resetTeam(teamNumber: number): Promise<void> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot reset team: database not available");
+    return;
+  }
+
+  try {
+    await db.delete(teamBingoStates).where(eq(teamBingoStates.teamNumber, teamNumber));
+  } catch (error) {
+    console.error("[Database] Failed to reset team:", error);
+    throw error;
+  }
+}

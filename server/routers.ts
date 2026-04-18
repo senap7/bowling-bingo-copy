@@ -1,12 +1,12 @@
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, router } from "./_core/trpc";
+import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { z } from "zod";
-import { getTeamBingoState, upsertTeamBingoState } from "./db";
+import { TRPCError } from "@trpc/server";
+import { getTeamBingoState, upsertTeamBingoState, getAllTeamRankings, resetAllTeams, resetTeam } from "./db";
 
 export const appRouter = router({
-    // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
   system: systemRouter,
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
@@ -29,10 +29,9 @@ export const appRouter = router({
         if (!state) {
           return null;
         }
-        // JSON文字列のまま返す（フロントエンドでパースする）
         return state;
       }),
-    
+
     // チームビンゴ状態を更新
     updateBingoState: publicProcedure
       .input(z.object({
@@ -50,6 +49,71 @@ export const appRouter = router({
           totalScore: input.totalScore,
         });
         return { success: true };
+      }),
+
+    // 全チームのランキングを取得
+    getRankings: publicProcedure
+      .query(async () => {
+        const rankings = await getAllTeamRankings();
+        return rankings.map(r => ({
+          teamNumber: r.teamNumber,
+          totalScore: r.totalScore,
+          completedLines: (() => {
+            try {
+              const lines = JSON.parse(r.completedLines);
+              return Array.isArray(lines) ? lines.length : 0;
+            } catch {
+              return 0;
+            }
+          })(),
+          updatedAt: r.updatedAt,
+        }));
+      }),
+  }),
+
+  // 管理者専用ルーター
+  admin: router({
+    // 全チームリセット（管理者のみ）
+    resetAllTeams: protectedProcedure
+      .mutation(async ({ ctx }) => {
+        if (ctx.user.role !== 'admin') {
+          throw new TRPCError({ code: 'FORBIDDEN', message: '管理者権限が必要です' });
+        }
+        await resetAllTeams();
+        return { success: true };
+      }),
+
+    // 特定チームリセット（管理者のみ）
+    resetTeam: protectedProcedure
+      .input(z.object({ teamNumber: z.number().min(1).max(10) }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== 'admin') {
+          throw new TRPCError({ code: 'FORBIDDEN', message: '管理者権限が必要です' });
+        }
+        await resetTeam(input.teamNumber);
+        return { success: true };
+      }),
+
+    // 全チームの詳細状態を取得（管理者のみ）
+    getAllTeamStates: protectedProcedure
+      .query(async ({ ctx }) => {
+        if (ctx.user.role !== 'admin') {
+          throw new TRPCError({ code: 'FORBIDDEN', message: '管理者権限が必要です' });
+        }
+        const rankings = await getAllTeamRankings();
+        return rankings.map(r => ({
+          teamNumber: r.teamNumber,
+          totalScore: r.totalScore,
+          completedLines: (() => {
+            try {
+              const lines = JSON.parse(r.completedLines);
+              return Array.isArray(lines) ? lines.length : 0;
+            } catch {
+              return 0;
+            }
+          })(),
+          updatedAt: r.updatedAt,
+        }));
       }),
   }),
 });
