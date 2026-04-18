@@ -12,7 +12,7 @@ import { getTeamColor, TEAM_COLORS } from '@shared/teamColors';
  */
 function RankingTable() {
   const { data: rankings, isLoading } = trpc.team.getRankings.useQuery(undefined, {
-    refetchInterval: 3000,
+    refetchInterval: 2000,
   });
 
   if (isLoading) {
@@ -124,6 +124,7 @@ export default function Home() {
   const [showBingoEffect, setShowBingoEffect] = useState(false);
   const [particles, setParticles] = useState<Array<{ id: string; x: number; y: number }>>([]);
   const [bowlingScoreInput, setBowlingScoreInput] = useState<string>('');
+  const [isBowlingInputFocused, setIsBowlingInputFocused] = useState(false);
   const utils = trpc.useUtils();
 
   const { grid, totalScore, completedLines, toggleCell, resetGame, isLineCompleted, isLoading } = useTeamBingoBowling(selectedTeam);
@@ -134,15 +135,16 @@ export default function Home() {
   // チームのビンゴ状態を取得（bowlingScoreを読み込む）
   const { data: teamState } = trpc.team.getBingoState.useQuery(
     { teamNumber: selectedTeam },
-    { refetchInterval: 3000 }
+    { refetchInterval: 2000 }
   );
 
-  // bowlingScoreをサーバーから読み込む
+  // bowlingScoreをサーバーから読み込む（フォーカス中は上書きしない）
   useEffect(() => {
+    if (isBowlingInputFocused) return; // 入力中はポーリングで上書きしない
     if (teamState && teamState.bowlingScore !== undefined) {
       setBowlingScoreInput(teamState.bowlingScore > 0 ? teamState.bowlingScore.toString() : '');
     }
-  }, [teamState?.bowlingScore, selectedTeam]);
+  }, [teamState?.bowlingScore, selectedTeam, isBowlingInputFocused]);
 
   // ボウリング実スコア更新ミューテーション
   const [bowlingScoreError, setBowlingScoreError] = useState<string | null>(null);
@@ -326,7 +328,8 @@ export default function Home() {
                 min="0"
                 value={bowlingScoreInput}
                 onChange={(e) => setBowlingScoreInput(e.target.value)}
-                onBlur={handleBowlingScoreCommit}
+                onFocus={() => setIsBowlingInputFocused(true)}
+                onBlur={() => { setIsBowlingInputFocused(false); handleBowlingScoreCommit(); }}
                 onKeyDown={(e) => e.key === 'Enter' && handleBowlingScoreCommit()}
                 placeholder="0"
                 className="w-full text-center text-3xl md:text-4xl font-bold bg-transparent border-b-2 outline-none transition-colors duration-300 font-mono"
