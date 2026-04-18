@@ -219,11 +219,12 @@ export default function Home() {
             チーム:
           </label>
           <Select value={selectedTeam.toString()} onValueChange={handleTeamChange}>
-            <SelectTrigger className="w-20 md:w-24 bg-dark-card" style={{
+            <SelectTrigger className="w-32 bg-dark-card font-bold" style={{
               borderColor: teamColor.color,
               color: teamColor.color,
             }}>
-              <SelectValue />
+              <span className="inline-block w-2 h-2 rounded-full mr-2" style={{ backgroundColor: teamColor.color }} />
+              チーム {selectedTeam}
             </SelectTrigger>
             <SelectContent className="bg-dark-card border-neon-cyan">
               {Array.from({ length: 10 }, (_, i) => i + 1).map(team => {
