@@ -137,9 +137,11 @@ export default function Admin() {
 
   const resetSharedLayoutMutation = trpc.admin.resetSharedLayout.useMutation({
     onSuccess: () => {
-      toast.success('共通カード配置をリセットしました。新しいカードが生成されます。');
+      toast.success('新しいカードを生成しました。');
       utils.team.getSharedLayout.invalidate();
       utils.admin.getSharedLayout.invalidate();
+      // 即座にプレビューを更新
+      refetchLayout();
     },
     onError: (err) => {
       toast.error(`エラー: ${err.message}`);

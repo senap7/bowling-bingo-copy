@@ -14,6 +14,7 @@ import {
   upsertSharedBingoLayout,
   resetSharedBingoLayout,
 } from "./db";
+import { generateBingoGrid } from "@shared/bingoGrid";
 
 const ADMIN_PASSWORD = "bowlinglover";
 
@@ -192,8 +193,12 @@ export const appRouter = router({
         if (input.password !== ADMIN_PASSWORD) {
           throw new TRPCError({ code: 'UNAUTHORIZED', message: 'パスワードが正しくありません' });
         }
+        // 古いカードを削除してから新しいカードを即座に生成・保存
         await resetSharedBingoLayout();
-        return { success: true };
+        const newGrid = generateBingoGrid();
+        const gridData = JSON.stringify(newGrid);
+        await upsertSharedBingoLayout(gridData);
+        return { success: true, gridData };
       }),
 
     // 共通カード配置を取得（パスワード認証付き、プレビュー用）

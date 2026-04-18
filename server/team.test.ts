@@ -65,11 +65,26 @@ describe("admin.resetTeam", () => {
 });
 
 describe("admin.resetSharedLayout", () => {
-  it("正しいパスワードで共通カードリセット成功", async () => {
+  it("正しいパスワードで共通カードリセット成功し新しいカードが生成される", async () => {
     const ctx = createPublicContext();
     const caller = appRouter.createCaller(ctx);
     const result = await caller.admin.resetSharedLayout({ password: VALID_PASSWORD });
-    expect(result).toEqual({ success: true });
+    expect(result.success).toBe(true);
+    expect(result.gridData).toBeDefined();
+    expect(typeof result.gridData).toBe("string");
+    // 生成されたカードが有効なJSONであることを確認
+    const grid = JSON.parse(result.gridData);
+    expect(grid).toHaveLength(5);
+    expect(grid[0]).toHaveLength(5);
+    // 中央がストライクであることを確認
+    expect(grid[2][2].score).toBe('▶︎◀︎');
+    // 内側2列目がスペアであることを確認
+    expect(grid[1][1].score).toContain('◢');
+    expect(grid[1][2].score).toContain('◢');
+    expect(grid[1][3].score).toContain('◢');
+    // DBにも保存されていることを確認
+    const layout = await caller.admin.getSharedLayout({ password: VALID_PASSWORD });
+    expect(layout).toBe(result.gridData);
   });
 
   it("間違ったパスワードでエラー", async () => {
