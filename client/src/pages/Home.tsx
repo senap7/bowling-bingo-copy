@@ -118,47 +118,45 @@ function RankingTable() {
 
 /**
  * リーチ判定：あと1マスでビンゴになるセルの座標セットを返す
- * 各ライン（行・列・斜め）で marked が4つ、未marked が1つの場合にそのセルをリーチとみなす
+ * 可変グリッドサイズ対応（4×4 / 5×5）
  */
 function getReachCells(grid: { marked: boolean }[][]): Set<string> {
   const reachSet = new Set<string>();
-
+  const size = grid.length;
+  if (size === 0) return reachSet;
+  const threshold = size - 1; // リーチは「あと1マス」
   // 行チェック
-  for (let row = 0; row < 5; row++) {
+  for (let row = 0; row < size; row++) {
     const markedCount = grid[row].filter(c => c.marked).length;
-    if (markedCount === 4) {
-      for (let col = 0; col < 5; col++) {
+    if (markedCount === threshold) {
+      for (let col = 0; col < size; col++) {
         if (!grid[row][col].marked) reachSet.add(`${row}-${col}`);
       }
     }
   }
-
   // 列チェック
-  for (let col = 0; col < 5; col++) {
-    const markedCount = grid.filter(r => r[col].marked).length;
-    if (markedCount === 4) {
-      for (let row = 0; row < 5; row++) {
+  for (let col = 0; col < size; col++) {
+    const markedCount = grid.filter(r => r[col]?.marked).length;
+    if (markedCount === threshold) {
+      for (let row = 0; row < size; row++) {
         if (!grid[row][col].marked) reachSet.add(`${row}-${col}`);
       }
     }
   }
-
   // 左上→右下 斜めチェック
-  const diagLRMarked = grid.filter((r, i) => r[i].marked).length;
-  if (diagLRMarked === 4) {
-    for (let i = 0; i < 5; i++) {
+  const diagLRMarked = grid.filter((r, i) => r[i]?.marked).length;
+  if (diagLRMarked === threshold) {
+    for (let i = 0; i < size; i++) {
       if (!grid[i][i].marked) reachSet.add(`${i}-${i}`);
     }
   }
-
   // 右上→左下 斜めチェック
-  const diagRLMarked = grid.filter((r, i) => r[4 - i].marked).length;
-  if (diagRLMarked === 4) {
-    for (let i = 0; i < 5; i++) {
-      if (!grid[i][4 - i].marked) reachSet.add(`${i}-${4 - i}`);
+  const diagRLMarked = grid.filter((r, i) => r[size - 1 - i]?.marked).length;
+  if (diagRLMarked === threshold) {
+    for (let i = 0; i < size; i++) {
+      if (!grid[i][size - 1 - i].marked) reachSet.add(`${i}-${size - 1 - i}`);
     }
   }
-
   return reachSet;
 }
 
@@ -425,7 +423,7 @@ export default function Home() {
         </div>
       ) : (
         <div className="mb-8 z-10">
-          <div className="grid grid-cols-5 gap-2 md:gap-3 p-4 md:p-6 bg-card border-2 rounded-lg backdrop-blur-sm transition-all duration-500" style={{
+          <div className={`grid ${grid.length === 4 ? 'grid-cols-4' : 'grid-cols-5'} gap-2 md:gap-3 p-4 md:p-6 bg-card border-2 rounded-lg backdrop-blur-sm transition-all duration-500`} style={{
             borderColor: teamColor.color,
             boxShadow: `0 0 30px ${teamColor.glow}, inset 0 0 30px ${teamColor.glow.replace('0.7', '0.05')}`,
           }}>

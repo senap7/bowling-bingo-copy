@@ -14,7 +14,7 @@ import {
   upsertSharedBingoLayout,
   resetSharedBingoLayout,
 } from "./db";
-import { generateBingoGrid } from "@shared/bingoGrid";
+import { generateBingoGrid, type GridSize } from "@shared/bingoGrid";
 
 const ADMIN_PASSWORD = "bowlinglover";
 
@@ -188,14 +188,15 @@ export const appRouter = router({
 
     // 共通カード配置を強制リセット（新しいカードを生成）
     resetSharedLayout: publicProcedure
-      .input(z.object({ password: z.string() }))
+      .input(z.object({ password: z.string(), gridSize: z.union([z.literal(4), z.literal(5)]).optional() }))
       .mutation(async ({ input }) => {
         if (input.password !== ADMIN_PASSWORD) {
           throw new TRPCError({ code: 'UNAUTHORIZED', message: 'パスワードが正しくありません' });
         }
+        const size: GridSize = input.gridSize ?? 5;
         // 古いカードを削除してから新しいカードを即座に生成・保存
         await resetSharedBingoLayout();
-        const newGrid = generateBingoGrid();
+        const newGrid = generateBingoGrid(size);
         const gridData = JSON.stringify(newGrid);
         await upsertSharedBingoLayout(gridData);
         return { success: true, gridData };

@@ -1,11 +1,12 @@
 import { Button } from '@/components/ui/button';
 import { trpc } from '@/lib/trpc';
-import { ArrowLeft, RefreshCw, Trash2, Trophy, Shield, Lock, Eye, Pencil, Save, X } from 'lucide-react';
+import { ArrowLeft, RefreshCw, Trash2, Trophy, Shield, Lock, Eye, Pencil, Save, X, Grid3X3 } from 'lucide-react';
 import { Link } from 'wouter';
 import { toast } from 'sonner';
 import { useState, useEffect } from 'react';
 import { getTeamColor } from '@shared/teamColors';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import type { GridSize } from '@shared/bingoGrid';
 
 interface BingoCell {
   id: string;
@@ -14,7 +15,7 @@ interface BingoCell {
 }
 
 /**
- * カードプレビューコンポーネント（5x5グリッド表示）
+ * カードプレビューコンポーネント（可変サイズ対応）
  */
 function CardPreview({ gridData, onEditCell }: { gridData: string; onEditCell?: (row: number, col: number, currentValue: string) => void }) {
   let grid: BingoCell[][] = [];
@@ -24,12 +25,20 @@ function CardPreview({ gridData, onEditCell }: { gridData: string; onEditCell?: 
     return <p className="text-neon-pink text-xs text-center">カードデータの解析に失敗しました</p>;
   }
 
+  const size = grid.length;
+  const gridColsClass = size === 4 ? 'grid-cols-4' : 'grid-cols-5';
+  const cellSizeClass = size === 4 ? 'w-14 h-14 md:w-16 md:h-16' : 'w-12 h-12 md:w-14 md:h-14';
+
   return (
-    <div className="grid grid-cols-5 gap-1.5 p-3">
+    <div className={`grid ${gridColsClass} gap-1.5 p-3`}>
       {grid.map((row, rowIndex) =>
         row.map((cell, colIndex) => {
-          const isCenter = rowIndex === 2 && colIndex === 2;
-          const isInnerRing = !isCenter && rowIndex >= 1 && rowIndex <= 3 && colIndex >= 1 && colIndex <= 3;
+          // 5×5の場合のみ中央ストライク判定
+          const isCenter = size === 5 && rowIndex === 2 && colIndex === 2;
+          // 内側リング判定（サイズに応じて変更）
+          const isInnerRing = size === 5
+            ? (!isCenter && rowIndex >= 1 && rowIndex <= 3 && colIndex >= 1 && colIndex <= 3)
+            : (rowIndex >= 1 && rowIndex <= 2 && colIndex >= 1 && colIndex <= 2);
           const isSpare = cell.score.includes('◢');
 
           return (
@@ -38,7 +47,7 @@ function CardPreview({ gridData, onEditCell }: { gridData: string; onEditCell?: 
               onClick={() => onEditCell?.(rowIndex, colIndex, cell.score)}
               disabled={isCenter || !onEditCell}
               className={`
-                w-12 h-12 md:w-14 md:h-14
+                ${cellSizeClass}
                 rounded-md font-mono font-bold text-xs
                 flex items-center justify-center
                 border-2 transition-all duration-200
@@ -79,6 +88,9 @@ export default function Admin() {
   const [authError, setAuthError] = useState('');
   const [confirmReset, setConfirmReset] = useState(false);
 
+  // グリッドサイズ選択
+  const [selectedGridSize, setSelectedGridSize] = useState<GridSize>(5);
+
   // カード編集ダイアログ
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editRow, setEditRow] = useState(0);
@@ -110,6 +122,22 @@ export default function Admin() {
     { enabled: isAuthenticated }
   );
 
+  // 現在のカードのグリッドサイズを検出して選択状態に反映
+  useEffect(() => {
+    if (sharedLayout) {
+      try {
+        const grid = JSON.parse(sharedLayout);
+        if (Array.isArray(grid) && grid.length === 4) {
+          setSelectedGridSize(4);
+        } else {
+          setSelectedGridSize(5);
+        }
+      } catch {
+        // ignore
+      }
+    }
+  }, [sharedLayout]);
+
   const resetAllMutation = trpc.admin.resetAllTeams.useMutation({
     onSuccess: () => {
       toast.success('全チームのデータをリセットしました（共通カードも含む）');
@@ -137,7 +165,7 @@ export default function Admin() {
 
   const resetSharedLayoutMutation = trpc.admin.resetSharedLayout.useMutation({
     onSuccess: () => {
-      toast.success('新しいカードを生成しました。');
+      toast.success(`${selectedGridSize}×${selectedGridSize} の新しいカードを生成しました。`);
       utils.team.getSharedLayout.invalidate();
       utils.admin.getSharedLayout.invalidate();
       // 即座にプレビューを更新
@@ -172,7 +200,6 @@ export default function Admin() {
   // マス内容を保存
   const handleSaveCell = () => {
     if (!sharedLayout || !editValue.trim()) return;
-
     try {
       const grid: BingoCell[][] = JSON.parse(sharedLayout);
       grid[editRow][editCol].score = editValue.trim();
@@ -201,11 +228,9 @@ export default function Admin() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') verifyMutation.mutate({ password });
-              }}
+              onKeyDown={(e) => e.key === 'Enter' && verifyMutation.mutate({ password })}
               placeholder="パスワードを入力"
-              className="w-full bg-dark-card border-2 border-neon-cyan rounded-lg px-4 py-3 text-neon-cyan placeholder-neon-cyan placeholder-opacity-40 focus:outline-none focus:border-neon-yellow transition-colors text-center font-mono"
+              className="w-full p-3 rounded-lg bg-transparent border-2 border-neon-cyan text-neon-cyan text-center font-mono outline-none focus:border-neon-yellow transition-colors"
             />
             {authError && (
               <p className="text-neon-pink text-xs">{authError}</p>
@@ -213,21 +238,21 @@ export default function Admin() {
             <Button
               onClick={() => verifyMutation.mutate({ password })}
               disabled={verifyMutation.isPending || !password}
-              className="w-full text-background font-bold hover:opacity-90 transition-colors"
-              style={{ backgroundColor: '#7680c6' }}
+              className="w-full bg-neon-cyan text-background font-bold hover:opacity-80 transition-all"
             >
-              {verifyMutation.isPending ? '確認中...' : '入室する'}
+              {verifyMutation.isPending ? '認証中...' : 'ログイン'}
             </Button>
-            <Link href="/">
-              <Button
-                variant="outline"
-                className="w-full border-neon-cyan text-neon-cyan hover:bg-neon-cyan hover:text-background"
-              >
-                <ArrowLeft size={16} className="mr-2" />
-                ホームに戻る
-              </Button>
-            </Link>
           </div>
+
+          <Link href="/">
+            <Button
+              variant="outline"
+              className="mt-4 border-neon-cyan text-neon-cyan hover:bg-neon-cyan hover:text-background text-xs"
+            >
+              <ArrowLeft size={14} className="mr-1" />
+              ホームに戻る
+            </Button>
+          </Link>
         </div>
       </div>
     );
@@ -315,15 +340,59 @@ export default function Admin() {
             共通カード管理
           </h2>
           <p className="text-neon-cyan text-xs mb-3 opacity-70">
-            全チームで共有するビンゴカードの配置を管理します。リセットすると新しいカードが生成されます。
+            全チームで共有するビンゴカードの配置を管理します。グリッドサイズを選んで新しいカードを生成できます。
           </p>
+
+          {/* グリッドサイズ選択 */}
+          <div className="flex items-center gap-2 mb-4">
+            <Grid3X3 size={14} className="text-neon-yellow" />
+            <span className="text-neon-yellow text-xs font-bold">サイズ:</span>
+            <div className="flex gap-2 flex-1">
+              <button
+                onClick={() => setSelectedGridSize(5)}
+                className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold border-2 transition-all duration-200 ${
+                  selectedGridSize === 5
+                    ? 'bg-neon-yellow text-background border-neon-yellow'
+                    : 'bg-transparent text-neon-yellow border-neon-yellow border-opacity-40 hover:border-opacity-80'
+                }`}
+                style={selectedGridSize === 5 ? {
+                  boxShadow: '0 0 15px rgba(255, 190, 11, 0.5)',
+                } : {}}
+              >
+                5×5
+              </button>
+              <button
+                onClick={() => setSelectedGridSize(4)}
+                className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold border-2 transition-all duration-200 ${
+                  selectedGridSize === 4
+                    ? 'bg-neon-yellow text-background border-neon-yellow'
+                    : 'bg-transparent text-neon-yellow border-neon-yellow border-opacity-40 hover:border-opacity-80'
+                }`}
+                style={selectedGridSize === 4 ? {
+                  boxShadow: '0 0 15px rgba(255, 190, 11, 0.5)',
+                } : {}}
+              >
+                4×4
+              </button>
+            </div>
+          </div>
+
+          {/* サイズ説明 */}
+          <div className="bg-dark-card rounded-lg border border-neon-yellow border-opacity-20 p-2 mb-4">
+            <p className="text-neon-cyan text-xs opacity-60 text-center">
+              {selectedGridSize === 5
+                ? '5×5: 中央ストライク固定 / 内側8マス=スペア / 外側=通常スコア'
+                : '4×4: ストライクなし / 内側4マス=スペア / 外側=通常スコア'}
+            </p>
+          </div>
+
           <div className="flex gap-2 mb-4">
             <Button
-              onClick={() => resetSharedLayoutMutation.mutate({ password })}
+              onClick={() => resetSharedLayoutMutation.mutate({ password, gridSize: selectedGridSize })}
               disabled={resetSharedLayoutMutation.isPending}
               className="flex-1 bg-neon-yellow text-background border-2 border-neon-yellow hover:opacity-80 font-bold transition-all"
             >
-              {resetSharedLayoutMutation.isPending ? '処理中...' : '新しいカードを生成'}
+              {resetSharedLayoutMutation.isPending ? '処理中...' : `${selectedGridSize}×${selectedGridSize} カードを生成`}
             </Button>
             <Button
               onClick={() => refetchLayout()}
@@ -348,14 +417,26 @@ export default function Admin() {
               <div className="bg-dark-card rounded-lg border border-neon-cyan border-opacity-30 flex justify-center">
                 <CardPreview gridData={sharedLayout} onEditCell={handleEditCell} />
               </div>
-              <p className="text-neon-cyan text-xs opacity-40 mt-2 text-center">
-                黄色 = スペアマス（内側2列目） / 水色 = 通常マス / 中央 = ストライク
-              </p>
+              {(() => {
+                try {
+                  const grid = JSON.parse(sharedLayout);
+                  const currentSize = Array.isArray(grid) ? grid.length : 5;
+                  return (
+                    <p className="text-neon-cyan text-xs opacity-40 mt-2 text-center">
+                      {currentSize === 5
+                        ? '黄色 = スペアマス（内側2列目） / 水色 = 通常マス / 中央 = ストライク'
+                        : '黄色 = スペアマス（内側） / 水色 = 通常マス'}
+                    </p>
+                  );
+                } catch {
+                  return null;
+                }
+              })()}
             </div>
           ) : (
             <div className="bg-dark-card rounded-lg border border-neon-cyan border-opacity-30 p-6 text-center">
               <p className="text-neon-cyan text-xs opacity-60">
-                カードが未生成です。「新しいカードを生成」ボタンを押すか、ホーム画面でチームがアクセスすると自動生成されます。
+                カードが未生成です。「カードを生成」ボタンを押してください。
               </p>
             </div>
           )}
@@ -381,9 +462,9 @@ export default function Admin() {
           </div>
 
           {isLoading ? (
-            <p className="text-neon-cyan text-xs text-center py-4">読み込み中...</p>
+            <p className="text-neon-cyan text-xs text-center">読み込み中...</p>
           ) : !teamStates || teamStates.length === 0 ? (
-            <p className="text-neon-cyan text-xs text-center py-4">データなし（全チームリセット済み）</p>
+            <p className="text-neon-cyan text-xs text-center opacity-60">まだチームデータがありません</p>
           ) : (
             <table className="w-full text-xs">
               <thead>
