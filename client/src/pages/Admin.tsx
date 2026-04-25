@@ -238,7 +238,7 @@ export default function Admin() {
             <Button
               onClick={() => verifyMutation.mutate({ password })}
               disabled={verifyMutation.isPending || !password}
-              className="w-full bg-neon-cyan text-background font-bold hover:opacity-80 transition-all"
+              className="w-full bg-neon-cyan text-background font-bold hover:opacity-80 transition-all shadow-[0_0_15px_rgba(0,245,255,0.4)]"
             >
               {verifyMutation.isPending ? '認証中...' : 'ログイン'}
             </Button>
@@ -247,7 +247,7 @@ export default function Admin() {
           <Link href="/">
             <Button
               variant="outline"
-              className="mt-4 border-neon-cyan text-neon-cyan hover:bg-neon-cyan hover:text-background text-xs"
+              className="mt-4 bg-neon-cyan/15 border-neon-cyan/60 text-neon-cyan hover:bg-neon-cyan hover:text-background text-xs"
             >
               <ArrowLeft size={14} className="mr-1" />
               ホームに戻る
