@@ -353,7 +353,7 @@ export default function Admin() {
                 className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold border-2 transition-all duration-200 ${
                   selectedGridSize === 5
                     ? 'bg-neon-yellow text-background border-neon-yellow'
-                    : 'bg-transparent text-neon-yellow border-neon-yellow border-opacity-40 hover:border-opacity-80'
+                    : 'bg-neon-yellow/15 text-neon-yellow border-neon-yellow/60 hover:bg-neon-yellow/30 hover:border-neon-yellow'
                 }`}
                 style={selectedGridSize === 5 ? {
                   boxShadow: '0 0 15px rgba(255, 190, 11, 0.5)',
@@ -366,7 +366,7 @@ export default function Admin() {
                 className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold border-2 transition-all duration-200 ${
                   selectedGridSize === 4
                     ? 'bg-neon-yellow text-background border-neon-yellow'
-                    : 'bg-transparent text-neon-yellow border-neon-yellow border-opacity-40 hover:border-opacity-80'
+                    : 'bg-neon-yellow/15 text-neon-yellow border-neon-yellow/60 hover:bg-neon-yellow/30 hover:border-neon-yellow'
                 }`}
                 style={selectedGridSize === 4 ? {
                   boxShadow: '0 0 15px rgba(255, 190, 11, 0.5)',
@@ -397,7 +397,7 @@ export default function Admin() {
             <Button
               onClick={() => refetchLayout()}
               variant="outline"
-              className="border-neon-yellow text-neon-yellow hover:bg-neon-yellow hover:text-background"
+              className="bg-neon-yellow/20 border-neon-yellow/60 text-neon-yellow hover:bg-neon-yellow hover:text-background"
             >
               <RefreshCw size={14} />
             </Button>
